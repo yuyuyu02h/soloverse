@@ -4,6 +4,15 @@
 
 This file defines security requirements and records security-relevant facts for SoloVerse. Security-sensitive changes require additional review and validation.
 
+## 2026-09-16: Candidate pipeline and recovery
+
+- Owner-requested private snapshots copy source, configuration and a consistent DB without printing their contents. `.recovery/` is ignored by Git; folders use mode 0700 and secret copies 0600. Never upload the snapshot to GitHub or an external model.
+- Restoration verifies SHA-256 and requires a new destination. Keep the original project; do not use a destructive Git reset or DB deletion. See [recovery guide](../docs/RESTORE_2026-09-16.md).
+- API telemetry stores numeric usage/status and fixed reason codes, not keys, prompts, provider error bodies or generated text. User IDs and usage metadata remain sensitive. Completed telemetry/candidates are pruned after 30 days by the enhanced worker.
+- Candidate text, profiles and memory are tenant data. `/api/timeline/diagnostics` derives its user from JWT; provider-wide quota headers are local-operator-only. User-supplied query IDs cannot select another tenant.
+- Structured context is sent to the selected cloud LLM, like existing posts/settings. Lightweight quality checks are not a complete safety/moderation or prompt-injection defense.
+- Internal budgets do not guarantee zero billing; provider account settings remain authoritative. Only one active job runner is supported.
+
 ## Data Classification
 
 Treat the following as confidential or sensitive:

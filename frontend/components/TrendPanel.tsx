@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Avatar, timeAgo } from './utils';
+import { ContentStatus } from './ContentStatus';
 
 interface Trend {
   id: string;
@@ -182,12 +183,13 @@ export function TrendPanel({ onClose, onTrendClick, onWorldRebuilt }: {
                     {rebuilding ? 'AI住人を作り直しています…' : 'AI住人とAI投稿を作り直す'}
                   </button>
                   <p style={{ margin: '8px 4px 0', color: '#71767b', fontSize: 11, lineHeight: 1.5 }}>
-                    アカウントとあなたの投稿は残ります。生成APIを3回ほど使用します。
+                    アカウントとあなたの投稿は残ります。投稿候補も作り直し、複数回の生成APIを使用します。
                   </p>
                 </div>
               )}
             </>
           )}
+          <ContentStatus />
         </div>
       </div>
     </div>

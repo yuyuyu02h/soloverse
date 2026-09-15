@@ -6,6 +6,12 @@ const { scheduleReactions, scheduleReplyReactions, generateAITimelinePosts } = r
 
 const router = express.Router();
 
+// Only the authenticated user's content metrics; no provider-wide account statistics.
+router.get('/diagnostics', authenticate, async (req, res) => {
+  try { res.json(await require('../services/llmRuntime').diagnostics(req.userId)); }
+  catch (_) { res.status(500).json({ error: '診断情報を取得できませんでした' }); }
+});
+
 // ─── タイムライン取得（差分取得対応・リプライツリー付き）────
 router.get('/', authenticate, async (req, res) => {
   const userId = req.userId;

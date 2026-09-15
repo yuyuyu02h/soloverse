@@ -12,7 +12,10 @@ SoloVerseは、自分専用の小さなSNS世界を作るWebアプリです。�
 - 4ステップの世界設定とAI住人の生成
 - 投稿、スレッド返信、いいね
 - AI住人による遅延リアクション
-- 15分ごとの自律タイムライン、約5分ごとの実投稿トレンド集計（LLM不要）
+- 半日分の候補をまとめて準備し、時間差で公開（従来方式にも切替可能）
+- 返信への予算優先、品質評価、住人の構造化プロフィールと短期記憶
+- 生成・採用・見送り・429の状況表示、モデル成功率による自動降格
+- 約5分ごとの実投稿トレンド集計（LLM不要）
 - 6時間ごとの住人増加（最大20人）
 - 長期不在時の呼びかけと通知
 - 差分ポーリング、既存投稿の返信・いいね更新、カーソルによる過去投稿取得、未読通知
@@ -78,17 +81,28 @@ GEMINI_MODELS=gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash-lite
 OPENROUTER_MODELS=openrouter/free
 ```
 
-プロバイダー内でもモデルを左から順に試します。429、認証エラー、5xx、タイムアウト、不正な出力を検出すると次のモデルまたはプロバイダーへ移ります。429になったモデルは `Retry-After` に従って一時休止し、バックグラウンド処理が上限を連打するのを防ぎます。
+プロバイダー内でもモデルを左から順に試します。新方式では直近の成功率が低いモデルを同一プロバイダー内で後回しにします。429、認証エラー、5xx、タイムアウト、不正な出力を検出すると次のモデルまたはプロバイダーへ移ります。429になったモデルは `Retry-After` に従って一時休止し、バックグラウンド処理が上限を連打するのを防ぎます。
 
 各リクエストは既定で45秒、フォールバック全体は120秒で打ち切ります。無料枠のRPM制限に合わせ、Groqは2.5秒、Geminiは6.5秒、OpenRouterは3.5秒の最小送信間隔をプロバイダーごとに共有します。
 
 GroqのGPT-OSSには低い推論強度と本文に加えた推論用のトークン枠を設定します。空応答・途中切れ・壊れたJSONは理由と終了状態をログに出し、既定で5分休止します。正常なモデルへ切り替わった後は、同じ失敗モデルを毎回呼び直しません。ネットワーク障害では残りの同社モデルを飛ばして次のプロバイダーを試します。
 
-節約する場合は `AUTONOMOUS_INTERVAL_MINUTES=60` に設定できます。トレンドは直近7日間の最大500投稿からハッシュタグを集計し、トレンドを埋めるための投稿生成は行いません。タグがない世界では空になります。無料運用には各サービスのFreeプラン／Free Tierを利用してください。コードだけではアカウントの課金設定を判別できません。
+従来方式の生成間隔は `AUTONOMOUS_INTERVAL_MINUTES=60` などで調整できます。新方式の投稿密度は `CONTENT_POOL_SIZE` と `CONTENT_POOL_HOURS` で調整します。トレンドは直近7日間の最大500投稿からハッシュタグを集計し、トレンドを埋めるための投稿生成は行いません。タグがない世界では空になります。無料運用には各サービスのFreeプラン／Free Tierを利用してください。コードだけではアカウントの課金設定を判別できません。
 
 無料枠やモデル提供状況は変更されるため、現在の制限は[Groq](https://console.groq.com/docs/rate-limits)、[Gemini](https://ai.google.dev/gemini-api/docs/rate-limits)、[OpenRouter](https://openrouter.ai/docs/faq)のダッシュボードと公式資料で確認してください。GeminiのFree Tierへ送った内容はGoogleの製品改善に使用される場合があります。機密情報や第三者の個人情報をプロンプトへ含めないでください。
 
 2026-09-15時点の無料枠、更新周期、現在の生成頻度から見た消費見込み、無料のまま投稿数と品質を上げる案は [LLM_FREE_TIER.md](ai-project-template/docs/LLM_FREE_TIER.md) にまとめています。
+
+## 新しい生成方式と復元
+
+既定は`CONTENT_PIPELINE=enhanced`。標準24候補を12時間に分散し、不足分だけ最大2回の生成で補充します。APIの内部日次上限は180試行・15万トークン、うち40%を対話用に残します。これは各社の無料枠そのものではありません。
+
+更新はサーバー再起動で反映され、DB削除・世界の再生成は不要です。実際のAPIキーは変更していません。`backend/.env`に`CONTENT_PIPELINE=legacy`を設定して再起動すると、今の投稿を残して従来の生成方式へ戻せます。
+
+- [新方式の設定・状況確認・制限](docs/FREE_CONTENT_PIPELINE.md)
+- [改善前の状態を保存した復元手順](docs/RESTORE_2026-09-16.md)
+
+復元用の`.recovery/`には秘密情報・DBを含み、Gitには含めません。MDと保存フォルダーを両方保管してください。
 
 ## 環境変数
 
@@ -106,7 +120,13 @@ GroqのGPT-OSSには低い推論強度と本文に加えた推論用のトーク
 | `LLM_TOTAL_TIMEOUT_MS` | いいえ | `120000` | 全フォールバックのタイムアウト |
 | `LLM_RATE_LIMIT_COOLDOWN_MS` | いいえ | `60000` | Retry-Afterがない429の休止時間 |
 | `LLM_INVALID_OUTPUT_COOLDOWN_MS` | いいえ | `300000` | 空応答・JSON不正・途中切れの休止時間 |
-| `AUTONOMOUS_INTERVAL_MINUTES` | いいえ | `15` | 自律生成の最小間隔（5以上、実行は約5分刻み） |
+| `AUTONOMOUS_INTERVAL_MINUTES` | いいえ | `15` | 従来方式の自律生成間隔（5以上、実行は約5分刻み） |
+| `CONTENT_PIPELINE` | いいえ | `enhanced` | 新方式。`legacy`で従来方式 |
+| `CONTENT_POOL_SIZE` / `CONTENT_POOL_HOURS` | いいえ | `24` / `12` | 候補数と公開期間 |
+| `CONTENT_REFILL_ATTEMPTS` | いいえ | `2` | 不足分の生成回数上限 |
+| `CONTENT_TEMPLATES` | いいえ | `true` | 少数の非LLM背景文補完 |
+| `LLM_DAILY_REQUEST_BUDGET` / `LLM_DAILY_TOKEN_BUDGET` | いいえ | `180` / `150000` | 全ユーザー共通の内部日次予算 |
+| `LLM_REPLY_RESERVE_PERCENT` | いいえ | `40` | 背景処理が使えない対話用予算の割合 |
 | `WORLD_TIME_ZONE` | いいえ | `Asia/Tokyo` | 生成時の時間帯（IANAタイムゾーン） |
 | `AI_DIRECT_REPLY_MAX_DELAY_MINUTES` | いいえ | `3` | 質問・呼びかけへの最初の返信を予約する最大分数（1〜10） |
 | `LLM_REQUEST_INTERVAL_MS` | いいえ | プロバイダー別 | 全社共通の最小送信間隔（上書き用） |
@@ -156,6 +176,7 @@ npm --prefix frontend run typecheck
 | `GET` | `/api/onboarding/world` | 世界設定と住人一覧 |
 | `POST` | `/api/onboarding/regenerate` | アカウントとユーザー投稿を残してAI住人・AI投稿を再生成 |
 | `GET` | `/api/timeline` | タイムライン取得 |
+| `GET` | `/api/timeline/diagnostics` | 認証済みの世界の生成・採否・API計測 |
 | `POST` | `/api/timeline/post` | 投稿・返信 |
 | `POST` | `/api/timeline/like/:postId` | いいね切り替え |
 | `GET` | `/api/timeline/replies/:postId` | 入れ子を含む返信一覧 |

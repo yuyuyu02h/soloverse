@@ -6,6 +6,23 @@ SoloVerseは、Next.jsフロントエンド、Express API、SQLiteデータベ�
 
 バックエンドプロセスはHTTP APIに加えて、リアクションキューを30秒ごと、自律世界エンジンを約5分ごとに実行します。フロントエンドは30秒ポーリングで投稿、返信数、いいね数、未読通知を更新します。
 
+## Enhanced content pipeline (2026-09-16)
+
+既定`CONTENT_PIPELINE=enhanced`。旧方式は`legacy`で保持する。詳細は [FREE_CONTENT_PIPELINE.md](../docs/FREE_CONTENT_PIPELINE.md)。
+
+- `contentConfig.js`: モード・日次予算・返信予約割合・候補数・期間・補充上限。
+- `llmRuntime.js`: 単一プロセスの優先キュー、送信前の永続予算予約、数値ヘッダー観測、モデル降格、ユーザー別診断。外部APIは引き続き`llm.js`のみ。
+- `contentPipeline.js`: バッチ生成→品質評価→DB候補保存→時間差公開。不足補充・初期生成・直接返信・定型文補完。
+- `contentQuality.js`: API不要の軽量評価。意味的重複と人格一貫性の近似で、完全な意味理解ではない。
+- `residentContext.js`: 既存プロフィールから構造化情報、直近8件の実投稿・返信を記憶に利用。
+- `contentSchema.js`: `llm_attempts`、`llm_provider_limits`、`content_events`、`content_candidates`、`content_pool_state`、`resident_profiles`、`resident_memory`を追加。既存テーブルを削除しない。
+- `ContentStatus.tsx`: ログイン中の世界の計測状況。提供元共有の残量はローカル診断CLIのみ。
+- 30秒ジョブは返信処理後に候補を公開。5分エンジンは候補を補充。legacyでは従来の自律生成間隔を使用する。
+- 候補公開は決定的な投稿IDとトランザクション、直接返信もキューID由来の投稿IDで重複を防止。実行は引き続き単一プロセス前提。
+- 計測・完了候補は30日保持。候補本文と短期記憶参照はユーザーデータ。原状復元は [RESTORE_2026-09-16.md](../docs/RESTORE_2026-09-16.md)。
+
+以下の自律生成頻度・過去時刻の初期投稿に関する記述は、特記がない場合legacy方式についてのもの。
+
 ## High-Level Flow
 
 ```text
@@ -125,7 +142,8 @@ Background schedule:
 | Job | Process cadence | Per-user rule |
 |---|---:|---|
 | Reaction queue | 30 seconds | Due queue rows, up to 20 per pass |
-| Autonomous engine dispatcher | 5 minutes | Autonomous posts after configured interval, default 15 minutes |
+| Autonomous engine dispatcher | 5 minutes | Enhanced: refill if <=2 pending and 30-minute pacing permits; legacy: configured interval, default 15 minutes |
+| Candidate publisher | 30 seconds, after replies | Enhanced only, at most 8 due candidates per world per pass |
 | Trend aggregation | Checked every 5 minutes | Last 7 days, up to 500 posts, top 3 hashtags |
 | Resident growth | Checked every 5 minutes | At least 6 hours since prior growth, max 20 residents |
 | Absence reaction | Checked every 5 minutes | After 24 hours without user post; deduplicated for 48 hours |

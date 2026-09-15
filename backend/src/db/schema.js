@@ -154,6 +154,7 @@ async function initDB() {
   await migrateAutonomousLogGrowth();
   await migrateReactionQueueAttempts();
   await createIndexes();
+  await require('./contentSchema').initContentSchema(db);
 
   console.log('DB initialized');
 }

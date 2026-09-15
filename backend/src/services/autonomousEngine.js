@@ -2,6 +2,9 @@ const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { callLLM, buildWorldSystemPrompt, safeParseJSON } = require('./llm');
 const { serializeWorldTask } = require('./worldTasks');
+const { enabled } = require('./contentConfig');
+const { generateReply } = require('./contentPipeline');
+const { recordContent } = require('./llmRuntime');
 
 function parseDBTimestamp(value) {
   if (!value) return 0;
@@ -28,6 +31,12 @@ function getTimeSlot() {
 // キャラ同士のリプライチェーン・ユーザーへのメンションを含む
 // ─────────────────────────────────────────────────────────
 async function runAutonomousTimeline(userId) {
+  if (require('./contentConfig').enabled()) {
+    const pipeline = require('./contentPipeline');
+    await pipeline.publishPool(userId);
+    await pipeline.fillPool(userId);
+    return pipeline.publishPool(userId);
+  }
   const [charsResult, settingsResult, userResult] = await Promise.all([
     db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ?', args: [userId] }),
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
@@ -259,7 +268,7 @@ async function runCharacterGrowth(userId) {
 
 JSON配列のみ出力（説明・\`\`\`不要）:
 [{"name":"表示名","username":"英数字（重複不可）","avatar_seed":"英単語","bio":"30字以内","personality":"一言","interests":"カンマ区切り","reply_style":"具体的な傾向","reaction_frequency":"high/mid/low","delay_profile":"fast/normal/slow"}]`,
-    600
+    600, { userId, job: 'growth', priority: 'background' }
   );
 
   const newChars = safeParseJSON(raw);
@@ -300,10 +309,14 @@ JSON配列のみ出力（説明・\`\`\`不要）:
     // 自己紹介投稿 + 既存キャラからの歓迎リプライ
     try {
       const charInfo = { name: c.name, username, personality: c.personality, interests: c.interests, reply_style: c.reply_style };
-      const intro = (await callLLM(
+      const fullChar = { ...charInfo, id: charId, user_id: userId, bio: c.bio, delay_profile: c.delay_profile };
+      const intro = enabled() ? await generateReply(userId, fullChar, settings, String(c.interests || settings.interests), {
+        job: 'introduction', priority: 'background', ambient: true,
+        instruction: '初めての自己紹介を具体的な趣味とともに20〜100字で書く。投稿本文のみ',
+      }) : (await callLLM(
         buildWorldSystemPrompt(settings, charInfo, ['初めての自己紹介投稿を40字以内で1件書く', '投稿文のみ出力する']),
         `「${c.name}」として初めての自己紹介投稿を書いてください。`,
-        100
+        100, { userId, job: 'introduction', priority: 'background' }
       )).trim().slice(0, 140);
 
       const introId = uuidv4();
@@ -311,20 +324,25 @@ JSON配列のみ出力（説明・\`\`\`不要）:
         sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, ai) VALUES (?, ?, ?, 'ai', ?, 1)`,
         args: [introId, userId, charId, intro],
       });
+      await recordContent(userId, 'introduction', 'published', 'llm');
 
       if (chars.length > 0 && Math.random() < 0.4) {
         const welcomer = chars[Math.floor(Math.random() * chars.length)];
         const welcomerInfo = { name: welcomer.name, username: welcomer.username, personality: welcomer.personality, interests: welcomer.interests, reply_style: welcomer.reply_style };
-        const welcome = (await callLLM(
+        const welcome = enabled() ? await generateReply(userId, welcomer, settings, intro, {
+          job: 'welcome', priority: 'background', ambient: true,
+          instruction: '新しい住人の自己紹介に、共通する趣味を具体的に挙げて歓迎する。20〜100字の本文のみ',
+        }) : (await callLLM(
           buildWorldSystemPrompt(settings, welcomerInfo, ['歓迎・挨拶の返信を30字以内で書く', '返信文のみ出力する']),
           `@${username} の自己紹介「${intro}」に歓迎の返信をしてください。`,
-          80
+          80, { userId, job: 'welcome', priority: 'background' }
         )).trim().slice(0, 140);
 
         await db.execute({
           sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai) VALUES (?, ?, ?, 'ai', ?, ?, 1)`,
           args: [uuidv4(), userId, welcomer.id, welcome, introId],
         });
+        await recordContent(userId, 'welcome', 'published', 'llm');
       }
     } catch (_) {}
 
@@ -396,7 +414,10 @@ async function checkAbsenceReactions(userId) {
     reply_style: char.reply_style,
   };
 
-  const content = (await callLLM(
+  const content = enabled() ? await generateReply(userId, char, settings, `${daysAway}日間ユーザーの投稿がない`, {
+    job: 'absence', priority: 'background', ambient: true,
+    instruction: 'しばらく投稿していない人をさりげなく気にかける。返信を強要せず20〜100字の投稿本文のみ',
+  }) : (await callLLM(
     buildWorldSystemPrompt(settings, charInfo, [
       '投稿文のみ出力する（説明・前置き不要）',
       '35字以内',
@@ -404,7 +425,7 @@ async function checkAbsenceReactions(userId) {
     `フォローしているユーザーが${daysAway}日間投稿していません。
 さりげなく気にかける投稿を1件書いてください。
 直接名指しせず「最近静かだな〜」「元気かな」のようなニュアンスで。`,
-    100
+    100, { userId, job: 'absence', priority: 'background' }
   )).trim().slice(0, 140);
 
   const postId = uuidv4();
@@ -413,6 +434,7 @@ async function checkAbsenceReactions(userId) {
           VALUES (?, ?, ?, 'ai', ?, 1)`,
     args: [postId, userId, char.id, content],
   });
+  await recordContent(userId, 'absence', 'published', 'llm');
 
   await db.execute({
     sql: `INSERT INTO notifications (id, user_id, type, character_id, post_id)

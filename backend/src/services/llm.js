@@ -167,16 +167,22 @@ function responseError(data, status) {
   return data?.error?.message || data?.message || `HTTP ${status}`;
 }
 
-async function callLLM(system, user, maxTokens = 1000) {
-  const targets = getTargets();
+async function callLLM(system, user, maxTokens = 1000, options = {}) {
+  return require('./llmRuntime').schedule(options, () => callLLMInternal(system, user, maxTokens, options));
+}
+
+async function callLLMInternal(system, user, maxTokens, options) {
+  const runtime = require('./llmRuntime');
+  const targets = await runtime.orderTargets(getTargets());
   if (!targets.length) throw new Error('LLM APIキーが設定されていません。backend/.env を確認してください');
 
   // 呼び出し元のプロンプトに「JSON」という指示語が含まれるかどうかで、
   // JSON出力を期待している呼び出しかどうかを自動判定する(呼び出し側の
   // シグネチャを変更せずに済むようにするための簡易ヒューリスティック)。
-  const expectJSON = /json/i.test(user);
+  const expectJSON = options.expectJSON ?? /json/i.test(user);
 
   let lastError = null;
+  let rateLimited = false;
   const messages = [];
   if (system) messages.push({ role: 'system', content: system });
   messages.push({ role: 'user', content: user });
@@ -197,11 +203,17 @@ async function callLLM(system, user, maxTokens = 1000) {
     const controller = new AbortController();
     const timeoutMs = Math.min(requestTimeoutMs, remainingMs);
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let attemptId = null;
+    let response;
+    let data;
+    let outcome = 'network_error';
+    const startedAt = Date.now();
     try {
       const request = buildProviderRequest(target, messages, maxTokens, controller.signal);
-      const response = await pacedFetch(target, request.url, request.options);
+      const estimatedTokens = (system || '').length + user.length + Math.max(1024, maxTokens + 512);
+      attemptId = await runtime.beforeAttempt(target, options, estimatedTokens);
+      response = await pacedFetch(target, request.url, request.options);
       const responseText = await response.text();
-      let data;
       try {
         data = responseText ? JSON.parse(responseText) : {};
       } catch (_) {
@@ -210,9 +222,11 @@ async function callLLM(system, user, maxTokens = 1000) {
       }
       if (!response.ok) {
         const status = response.status;
-        const msg = responseError(data, status);
+        const msg = `HTTP ${status}`; // Provider error text can echo prompts or credentials.
+        outcome = status === 429 ? 'rate_limited' : 'http_error';
         const label = `${target.providerName}/${target.model}`;
         if (status === 429) {
+          rateLimited = true;
           const providerWide = target.providerName === 'openrouter';
           setCooldown(target, retryAfterMs(response), providerWide);
           if (providerWide) blockedProviders.add(target.providerName);
@@ -245,6 +259,7 @@ async function callLLM(system, user, maxTokens = 1000) {
         : expectJSON && (!parsedJSON || typeof parsedJSON !== 'object') ? 'JSON形式エラー'
         : looksLikeReasoningLeak(cleaned) ? '思考過程の混入' : null;
       if (invalidReason) {
+        outcome = 'invalid_output';
         setCooldown(target, readMilliseconds('LLM_INVALID_OUTPUT_COOLDOWN_MS', 300000, 1000));
         console.warn(`[LLM] ${target.providerName}/${target.model}: ${invalidReason}; finish_reason=${finishReason || 'unknown'}, completion_tokens=${data.usage?.completion_tokens ?? 'unknown'}。次へ切り替えます`);
         lastError = new Error(`${target.providerName}/${target.model}: ${invalidReason}`);
@@ -252,19 +267,31 @@ async function callLLM(system, user, maxTokens = 1000) {
       }
 
       cooldowns.delete(targetKey(target));
+      outcome = 'success';
+      if (options.onResult) options.onResult({ attemptId, provider: target.providerName, model: target.model });
       console.log(`[LLM] provider: ${target.providerName}, requested: ${target.model}, used: ${data.model || target.model}`);
       return cleaned;
     } catch (e) {
+      if (e.code === 'LLM_DEFERRED') {
+        if (e.message === 'provider_quota') { lastError = e; continue; }
+        throw e;
+      }
+      outcome = e.name === 'AbortError' ? 'timeout' : 'network_error';
       const message = e.name === 'AbortError'
         ? `リクエストが${timeoutMs / 1000}秒でタイムアウトしました`
-        : e.message;
+        : 'Network or response processing error';
       setCooldown(target, 15000);
       blockedProviders.add(target.providerName);
       console.warn(`[LLM] ${target.providerName}/${target.model} fetch error:`, message);
       lastError = new Error(`${target.providerName}/${target.model}: ${message}`);
     } finally {
       clearTimeout(timeout);
+      await runtime.finishAttempt(attemptId, target, response, data, outcome, Date.now() - startedAt);
     }
+  }
+  if (lastError?.code === 'LLM_DEFERRED') throw lastError;
+  if (require('./contentConfig').enabled() && (rateLimited || (!lastError && targets.every(isCoolingDown)))) {
+    throw new runtime.DeferredError(rateLimited ? 'provider_quota' : 'provider_cooldown');
   }
   throw new Error(`LLM呼び出しに失敗しました: ${lastError?.message || '全モデルが休止中です。しばらく待って再試行してください'}`);
 }

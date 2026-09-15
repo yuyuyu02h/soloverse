@@ -56,7 +56,7 @@ ${allCharacters.length ? `- 既に作った人物と重複しない: ${allCharac
 
 必ずJSON配列のみを出力してください（説明文・\`\`\`・前置き・後書き一切不要）:
 [{"name":"表示名","username":"英数字のみ","avatar_seed":"英単語","bio":"30字以内","personality":"一言","interests":"カンマ区切り","reply_style":"具体的な傾向","reaction_frequency":"high/mid/low","delay_profile":"fast/normal/slow"}]`,
-      2000
+      2000, { userId, job: 'residents', priority: 'interactive' }
     );
 
     const parsed = safeParseJSON(raw) || [];

@@ -1,4 +1,5 @@
 const test = require('node:test');
+process.env.CONTENT_PIPELINE ||= 'legacy';
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const os = require('node:os');
@@ -118,6 +119,11 @@ test('主要ユーザーフローとテナント境界が動作する', async ()
   assert.equal(directReply.status, 200);
 
   const { db } = require('../src/db/schema');
+  // Enhanced seeds are published now, not backdated; make the older-page fixture explicit.
+  await db.execute({
+    sql: "UPDATE posts SET created_at=? WHERE user_id=? AND author_type='ai' AND reply_to IS NULL",
+    args: [new Date(Date.now() - 60000).toISOString(), registered.data.userId],
+  });
   const character = await db.execute({ sql: 'SELECT id FROM ai_characters WHERE user_id = ? LIMIT 1', args: [registered.data.userId] });
   await db.execute({
     sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai)
@@ -167,6 +173,19 @@ test('主要ユーザーフローとテナント境界が動作する', async ()
     method: 'POST', token: other.data.token, body: { content: '不正返信', replyTo: postId },
   })).status, 404);
   assert.equal((await api('/api/timeline?ids=' + postId, { token: other.data.token })).data.posts.length, 0);
+  assert.equal((await api('/api/timeline/diagnostics')).status, 401);
+  const ownMetrics = await api('/api/timeline/diagnostics', { token });
+  assert.equal(ownMetrics.status, 200);
+  const otherMetrics = await api('/api/timeline/diagnostics?userId=' + registered.data.userId, { token: other.data.token });
+  assert.equal(otherMetrics.status, 200);
+  assert.equal(otherMetrics.data.attempts.length, 0);
+  assert.equal(otherMetrics.data.pool.length, 0);
+  assert.equal(otherMetrics.data.profiles.length, 0);
+  if (process.env.CONTENT_PIPELINE === 'enhanced') {
+    assert.ok(ownMetrics.data.attempts.length > 0);
+    assert.ok(ownMetrics.data.profiles.length > 0);
+    assert.equal((await db.execute({ sql: 'SELECT COUNT(*) AS n FROM content_candidates WHERE character_id=?', args: [character.rows[0].id] })).rows[0].n, 0);
+  }
 });
 
 test('LLM JSONのコードフェンスと途中切れを復旧できる', () => {

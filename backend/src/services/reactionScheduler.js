@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { callLLM, buildWorldSystemPrompt, safeParseJSON } = require('./llm');
 const { serializeWorldTask } = require('./worldTasks');
+const { enabled } = require('./contentConfig');
 
 function analyzeEngagementIntent(value) {
   const content = String(value || '').normalize('NFKC').trim();
@@ -159,9 +160,14 @@ async function processReactionQueue() {
   for (const item of pending.rows) {
     try {
       if (item.reaction_type === 'like')  await processLike(item);
-      if (item.reaction_type === 'reply') await processReply(item);
+      if (item.reaction_type === 'reply') await serializeWorldTask(item.user_id, () => processReply(item));
       await db.execute({ sql: 'UPDATE reaction_queue SET done = 1 WHERE id = ?', args: [item.id] });
     } catch (e) {
+      if (e.code === 'LLM_DEFERRED') {
+        await db.execute({ sql: "UPDATE reaction_queue SET scheduled_at=datetime('now','+5 minutes') WHERE id=?", args: [item.id] });
+        await require('./llmRuntime').recordContent(item.user_id, 'reply', 'deferred', e.message);
+        continue; // Waiting for quota does not consume a generation retry.
+      }
       console.error(`[Queue] ${item.id} failed (attempt ${item.attempts + 1}/${MAX_ATTEMPTS}):`, e.message);
 
       const attempts = (item.attempts || 0) + 1;
@@ -201,8 +207,12 @@ async function processLike(item) {
 }
 
 async function processReply(item) {
+  if (enabled()) {
+    const current = (await db.execute({ sql: 'SELECT done FROM reaction_queue WHERE id=? AND user_id=?', args: [item.id, item.user_id] })).rows[0];
+    if (!current || current.done) return;
+  }
   const [postResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT content, reply_to FROM posts WHERE id = ?', args: [item.post_id] }),
+    db.execute({ sql: 'SELECT content, reply_to FROM posts WHERE id = ? AND user_id=?', args: [item.post_id, item.user_id] }),
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [item.user_id] }),
   ]);
   if (!postResult.rows[0]) return;
@@ -222,12 +232,14 @@ async function processReply(item) {
 
   // リプライの場合は親投稿のコンテキストも渡す
   let promptText = `以下の投稿に返信してください。\n\n投稿:「${post.content}」`;
+  let replyTarget = post.content;
   if (post.reply_to) {
     const parentPost = await db.execute({
-      sql: 'SELECT content FROM posts WHERE id = ?',
-      args: [post.reply_to],
+      sql: 'SELECT content FROM posts WHERE id = ? AND user_id=?',
+      args: [post.reply_to, item.user_id],
     });
     if (parentPost.rows[0]) {
+      replyTarget = `親投稿: ${parentPost.rows[0].content}\n返信対象: ${post.content}`;
       promptText = `スレッドの流れ:「${parentPost.rows[0].content}」\n\nこれへの返信:「${post.content}」\n\nこの返信に対してコメントしてください。`;
     }
   }
@@ -237,10 +249,23 @@ async function processReply(item) {
     args: [item.user_id, item.character_id],
   });
   promptText += `\n\n自分の最近の発言（同じ話を繰り返さず、好みを一貫させる）:\n${history.rows.map(p => p.content).join('\n') || 'まだなし'}`;
-  const replyContent = (await callLLM(system, promptText, 350)).trim().slice(0, 140);
+  const char = enabled() ? (await db.execute({ sql: 'SELECT * FROM ai_characters WHERE id=? AND user_id=?', args: [item.character_id, item.user_id] })).rows[0] : null;
+  if (enabled() && !char) return;
+  const replyContent = enabled()
+    ? await require('./contentPipeline').generateReply(item.user_id, char, settings, replyTarget)
+    : (await callLLM(system, promptText, 350)).trim().slice(0, 140);
   if (!replyContent) throw new Error('空の返信が返されました');
 
-  const replyId = uuidv4();
+  const replyId = enabled() ? `reaction-${item.id}` : uuidv4();
+  if (enabled()) {
+    await db.batch([
+      { sql: `INSERT OR IGNORE INTO posts(id,user_id,author_id,author_type,content,reply_to,ai) VALUES(?,?,?,'ai',?,?,1)`, args: [replyId,item.user_id,item.character_id,replyContent,item.post_id] },
+      { sql: `INSERT OR IGNORE INTO notifications(id,user_id,type,character_id,post_id) VALUES(?,?,'reply',?,?)`, args: [replyId,item.user_id,item.character_id,replyId] },
+      { sql: 'UPDATE reaction_queue SET done=1 WHERE id=? AND user_id=?', args: [item.id,item.user_id] },
+    ], 'write');
+    await require('./llmRuntime').recordContent(item.user_id, 'reply', 'published', 'llm');
+    return;
+  }
   await db.execute({
     sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai) VALUES (?, ?, ?, 'ai', ?, ?, 1)`,
     args: [replyId, item.user_id, item.character_id, replyContent, item.post_id],
@@ -287,7 +312,7 @@ JSON配列のみ出力（説明・\`\`\`不要）:
   );
 
   const posts = safeParseJSON(raw);
-  if (!posts || !Array.isArray(posts)) throw new Error('Seed posts JSON parse failed: ' + raw.slice(0, 200));
+  if (!posts || !Array.isArray(posts)) throw new Error('Seed posts JSON parse failed');
 
   const statements = [];
   const seen = new Set();
@@ -311,7 +336,7 @@ JSON配列のみ出力（説明・\`\`\`不要）:
 }
 
 function generateAITimelinePosts(userId) {
-  return serializeWorldTask(userId, () => seedTimeline(userId));
+  return serializeWorldTask(userId, () => enabled() ? require('./contentPipeline').seedEnhanced(userId) : seedTimeline(userId));
 }
 
 module.exports = {

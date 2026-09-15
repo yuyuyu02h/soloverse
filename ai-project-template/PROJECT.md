@@ -40,6 +40,12 @@ SoloVerseは、現時点では一般公開や商用の「完全ローンチ」�
 - アカウントと利用者投稿を残したAI世界の再生成
 - Groq → Gemini → OpenRouterのモデル／プロバイダーフォールバック
 
+- 返信優先の内部予算、候補のまとめ生成・品質評価・時間差公開・上限付き補充
+- モデル別成功率による自動降格、構造化プロフィールと実投稿ベースの短期記憶
+- 生成状況の表示、非LLM背景文補完、従来方式への切替と非公開の復元スナップショット
+
+詳細・限界は [FREE_CONTENT_PIPELINE.md](../docs/FREE_CONTENT_PIPELINE.md)。
+
 ### Out of Scope / Not Present
 
 - ローカルLLMの実行

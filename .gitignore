@@ -21,3 +21,6 @@ frontend/.next/
 coverage/
 *.log
 npm-debug.log*
+
+# Private recovery snapshots (contain credentials and personal data)
+.recovery/

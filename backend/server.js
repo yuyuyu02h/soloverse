@@ -65,7 +65,10 @@ function startBackgroundJobs() {
   const runQueue = async () => {
     if (queueRunning) return;
     queueRunning = true;
-    try { await processReactionQueue(); }
+    try {
+      await processReactionQueue();
+      await require('./src/services/contentPipeline').publishAll();
+    }
     catch (e) { console.error('[Queue] Error:', e.message); }
     finally { queueRunning = false; }
   };

@@ -2,7 +2,22 @@
 
 ## Purpose
 
-Record durable technical and product decisions so future developers and AI agents understand why the current implementation exists. Sources are current code, package/config files, the root README, `docs/improvement-2026-09-15.md`, and the available Git history. The history currently contains only the initial project commit, so earlier rationale may still be unavailable.
+Record durable technical and product decisions so future developers and AI agents understand why the current implementation exists. Sources are current code, package/config files, the root README, `docs/improvement-2026-09-15.md`, and the available Git history. Earlier pre-import rationale may still be unavailable; the 2026-09-16 implementation baseline is local commit `c7c23c2`.
+
+## 2026-09-16 — Reversible free-content pipeline
+
+Accepted for the personal creative milestone at the owner’s request.
+
+- Capture a private source/configuration/consistent-DB snapshot before runtime changes. Restore into a new directory, never overwrite the live project. MD and private snapshot are both required.
+- Keep old generation behind `CONTENT_PIPELINE=legacy`; default new code to `enhanced` without rewriting the real `.env` or existing residents/posts.
+- Use existing SQLite and a single active runner; add candidate, telemetry, profile and memory tables without new npm dependencies.
+- Share a conservative daily request/token budget across users and reserve 40% for interactive work. This is an internal cap, not a claim about provider allowances or billing.
+- Batch 24 candidates across 12 hours by default, bound refill to two calls, preserve delayed publication across restart, and cap optional templates at two per rolling day.
+- Use deterministic heuristic quality checks without paid scoring/embedding APIs. Track partial limitations explicitly; advanced semantic/factual evaluation remains TODO.
+- Demote models with fewer than 50% successes over at least three attempts in the last hour, only within their provider. Keep Groq → Gemini → OpenRouter order.
+- Keep tenant metrics authenticated and provider-wide quota information in a local operator CLI. Never log prompts or provider error bodies.
+
+Sources: `../../docs/FREE_CONTENT_PIPELINE.md`, `../../docs/RESTORE_2026-09-16.md`, new backend content services and tests. These defaults are adjustable implementation choices, not permanent owner-approved density targets.
 
 ## 2026-09-15 — Use the GitHub `main` branch as the repository source of truth
 

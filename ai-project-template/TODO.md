@@ -7,10 +7,10 @@ Use `ROADMAP.md` as the implementation sequence. The current milestone is a pers
 ## Now
 
 - [ ] Define a small personal acceptance set for meaningful replies, resident consistency, repetition, and daily post density.
-- [ ] Add LLM quota/usage and generated-versus-saved item measurements without logging prompts or private content.
-- [ ] Refill invalid/filtered generation results to the requested post count within a bounded quota budget.
-- [ ] Design a free-first content pool that gives user replies priority over autonomous background posts.
-- [ ] Review and commit the documentation roadmap changes when ready.
+- [x] Add LLM quota/usage and generated-versus-saved item measurements without logging prompts or private content.
+- [x] Refill invalid/filtered generation results within a bounded quota budget (target count is not guaranteed).
+- [x] Implement a persistent free-first content pool with reply-priority admission and a shared daily reserve.
+- [ ] Review the enhanced pipeline with real personal usage; tune density and rejection thresholds before choosing final defaults.
 - [ ] Remove `frontend/tsconfig.tsbuildinfo` from Git tracking and add the appropriate ignore rule.
 - [ ] Add CI for backend tests, frontend typecheck, and frontend build.
 - [ ] [TODO: Choose the project license and resolve the package/lockfile metadata mismatch.]
@@ -19,8 +19,9 @@ Use `ROADMAP.md` as the implementation sequence. The current milestone is a pers
 
 These are verified gaps. Detailed dependencies, priorities, sizes, and exit criteria are in `ROADMAP.md`.
 
-- [ ] Improve resident profiles and compact short-term memory passed to reply/autonomous generation.
-- [ ] Add topic relevance, specificity, persona consistency, and semantic repetition checks.
+- [x] Add structured existing profiles and compact short-term memory for enhanced generation.
+- [x] Add lightweight topic, specificity, explicit persona contradiction and near-duplicate checks.
+- [ ] Evaluate paraphrases, factual consistency and false rejections with a Japanese acceptance dataset; current checks are heuristic.
 - [ ] Improve the timeline, composer, replies, and resident screens with shared UI components and responsive behavior.
 - [ ] Decide and configure lint/format tooling.
 - [ ] Decide whether to enable TypeScript `strict` mode and plan incremental fixes.
@@ -32,7 +33,8 @@ These are verified gaps. Detailed dependencies, priorities, sizes, and exit crit
 ## Later
 
 - [ ] If always-on hosting is wanted, define hosting, persistent SQLite storage, process supervision, and one active background-job runner.
-- [ ] Define a lightweight personal backup/restore procedure; expand retention and disaster recovery only for hosted use.
+- [x] Create and verify a private local snapshot and new-directory restore procedure; see `../docs/RESTORE_2026-09-16.md`.
+- [ ] Decide independent backup storage/retention; local snapshots do not protect against disk loss.
 - [ ] [TODO: Decide whether email verification, password reset, account deletion, and session management are required.]
 - [ ] [TODO: Decide whether real-time delivery should replace or supplement 30-second polling.]
 - [ ] [TODO: Decide whether public multi-user social interaction is intentionally out of scope.]
@@ -83,6 +85,10 @@ Not required for the current personal/local milestone. [TODO: Reopen only if alw
 - [ ] No production observability, backup automation, or CI configuration exists.
 - [ ] `frontend/tsconfig.tsbuildinfo` is tracked even though it is a generated TypeScript build cache.
 
+## Enhanced Pipeline (2026-09-16)
+
+Requested Steps 1–9 have an implemented baseline with tests: metrics, reply reserve, batched persistent candidates, timed publication, bounded refill, lightweight quality gates, model demotion, structured traits/short memory, and optional templates. See [implementation guide](../docs/FREE_CONTENT_PIPELINE.md). `CONTENT_PIPELINE=legacy` retains the previous generation behavior. Public-launch work remains deferred.
+
 ## Recently Completed
 
 Verified in source and `docs/improvement-2026-09-15.md`:
@@ -99,7 +105,7 @@ Verified in source and `docs/improvement-2026-09-15.md`:
 - [x] Added backend provider, smoke, tenancy, and world regression tests.
 - [x] Expanded root README and created this AI-development documentation set.
 - [x] Established the GitHub repository at `https://github.com/yuyuyu02h/soloverse.git` with `main` as the default branch.
-- [x] Verified local `HEAD` and `origin/main` both point to initial commit `3127e0d`.
+- [x] Historically verified the initial `3127e0d` remote; implementation baseline is now local `c7c23c2`. No commit/push performed in this implementation session.
 - [x] Added a comprehensive staged implementation plan in `ROADMAP.md`.
 - [x] Set the current direction to personal creative quality, not a full public launch.
 - [x] Documented current provider free-tier behavior and a quota-efficient expansion plan in `docs/LLM_FREE_TIER.md`.

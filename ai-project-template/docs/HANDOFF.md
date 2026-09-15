@@ -2,161 +2,61 @@
 
 ## Last Updated
 
-2026-09-15 (Asia/Tokyo)
+2026-09-16 (Asia/Tokyo)
 
 ## Current Objective
 
-The AI-development documentation is aligned with the current implementation. The active direction is a personal creative-quality milestone, not a full public launch: improve content density, conversational meaning, resident consistency, UI polish, and free-tier efficiency.
+個人制作として気に入った体験を守りつつ、無料クラウドLLMの利用効率、投稿密度、会話品質、保守性を改善する。一般公開・商用ローンチは当面目標にしない。ローカルLLMは追加しない。
 
-## Current State
+## Completed This Session
 
-SoloVerse is a two-package local web application:
+ユーザー指定の1〜9を新方式として実装。最初に改善前状態を保存し、その後にコードを変更した。
 
-- Next.js 16 / React 19 frontend
-- Express 4 backend
-- SQLite via `@libsql/client`
-- JWT authentication
-- Groq → Gemini → OpenRouter cloud-LLM fallback
-- In-process reaction queue and autonomous-world scheduling
+- 基準コミット: `c7c23c2eccb7036b8645b9be433646fda6dcb8fb`。この作業ではcommit/pushをしていない。
+- 非公開の復元地点: `.recovery/before-free-content-2026-09-16/`。コード、Git履歴、未コミット差分、設定、整合性を保ったDBコピーとSHA-256を含む。
+- 復元指示: [RESTORE_2026-09-16.md](../../docs/RESTORE_2026-09-16.md)。新しいフォルダーへの復元を検証済み。MDと非公開スナップショットの両方が必要。
+- 実装・設定・制限: [FREE_CONTENT_PIPELINE.md](../../docs/FREE_CONTENT_PIPELINE.md)。
+- 新サービス: contentConfig / llmRuntime / contentPipeline / contentQuality / residentContext。外部呼び出しは引き続きllm.jsに集約。
+- 追加テーブル: API試行、提供元ヘッダー、生成イベント、候補プール、補充時刻、住人プロフィール、短期記憶。
+- 返信優先と永続日次予算、半日分のバッチ候補、時間差公開、上限付き補充、軽量品質評価、モデル降格、既存設定ベースの人格と実投稿の短期記憶、少数の非LLM背景文補完。
+- 状況UI: タイムラインの住人・トレンド欄。認証付きdiagnosticsはその世界のみ。共有クォータ／モデル成功率はローカルのdiagnostics.cjs。
+- 新旧モード両方のHTTP統合テスト、候補・予算・記憶・品質・降格・復元の回帰テストを追加。
+- README、ARCHITECTURE、SECURITY、PROJECT、TODO、ROADMAP、DECISIONSと引き継ぎを更新。
 
-The implemented flow includes registration/login, onboarding, per-user AI residents, seed posts, root and nested posts, likes, notifications, hashtag trends, autonomous posts, resident growth, absence reactions, polling updates, and explicit AI-world regeneration that preserves user-authored data.
+## Activation / Rollback
 
-The project is a Git repository whose `origin/main` is `https://github.com/yuyuyu02h/soloverse.git`. Local `HEAD` and the remote branch were verified at initial commit `3127e0d`. CI configuration, deployment configuration, and a root npm workspace manifest are not present.
+実際の.envや稼働用DBの内容は変更していない（ユーザー依頼による非公開バックアップのみ）。更新後にバックエンドを再起動すると、追加テーブルを作り、新方式が既定で有効になる。世界再生成・DB削除は不要。フロントエンドも更新版で起動する。
 
-## Completed In This Documentation Session
+`CONTENT_PIPELINE=legacy`をbackend/.envへ設定して再起動すると、現在の投稿・住人を残して従来方式へ切り替わる。新候補は公開停止するが保存したまま。保存時点のコード・データ全体への巻き戻しは復元MDの手順を使う。
 
-- Inspected root structure, package manifests/locks, safe example configuration, source, tests, README, and improvement record.
-- Did not read or record actual `.env` values or SQLite user data.
-- Documented product scope, current stack, commands, status, and constraints.
-- Documented frontend/backend/DB/API/LLM/background-job architecture and data flows.
-- Documented current security controls, risks, and production decisions still required.
-- Added project-specific AI-agent and development workflow rules.
-- Recorded verified technical decisions and open decisions.
-- Recorded known bugs, security work, technical debt, and owner questions.
-- Verified the local Git repository, `origin` URL, `main` branch, initial commit, and matching remote head.
-- Added `ROADMAP.md` with priorities, dependencies, implementation steps, and exit criteria across engineering, security, design, AI quality, product features, deployment, and beta validation.
-- Recorded the owner's decision to prioritize personal creative quality and defer public-launch-only requirements.
-- Added a dated free-tier analysis and quota-efficient content strategy in `docs/LLM_FREE_TIER.md`.
+標準値は24候補／12時間、補充2回まで、内部日次180試行／15万トークン、対話用40%確保。内部日付はUTC（日本時間9時切替）。この数値は各社の無料枠ではない。
 
-## Files Changed
+## Verification
 
-Documentation only:
+- Backend: `npm --prefix backend test` — 37件成功、0件失敗。模擬APIと一時DBで新旧方式を検証。
+- Frontend: typecheck / production build成功。lintスクリプトはなく、実施していない。
+- Snapshot: チェックサム検証、別フォルダー復元、保存前の追跡ファイルとの一致、DB integrity_checkを確認。実際の秘密値や投稿内容は出力していない。
+- Restore regression: 別Gitチェックアウト内への復元でも差分が復元先に適用されること、既存フォルダーを上書きしないこと、不正チェックサムで停止することを検証。
+- 実API生成は未実行。実モデルの品質・現行無料枠・長時間の体験は未確認。自動テストは実API枠を消費しない。
 
-- `README.md`
-- `ai-project-template/AGENTS.md`
-- `ai-project-template/PROJECT.md`
-- `ai-project-template/ARCHITECTURE.md`
-- `ai-project-template/SECURITY.md`
-- `ai-project-template/WORKFLOW.md`
-- `ai-project-template/TODO.md`
-- `ai-project-template/ROADMAP.md`
-- `ai-project-template/docs/DECISIONS.md`
-- `ai-project-template/docs/HANDOFF.md`
-- `ai-project-template/docs/LLM_FREE_TIER.md`
+## Important Limits / Next Work
 
-No source code, package manifest, lockfile, environment file, or database was modified by this documentation task.
+1. 実際の質問、作品ファン会話、挨拶、愚痴などを少数試し、投稿密度・採用率・棄却理由を確認する。[TODO: オーナーの好きな密度と品質の合格基準]
+2. 品質判定はルール・単語・文字類似度の近似。完全な意味理解、事実検証、モデレーションではない。過剰棄却や言い換えの見逃しを評価セットで調整する。
+3. プロフィール編集、長期記憶、要約、利用者による記憶削除／忘却UIは未実装。
+4. 次にデザインシステムと主要画面のUXを磨く。基本的なCI、lint、TypeScript strict、追跡中の生成キャッシュ整理はまだTODO。
+5. 1つのバックグラウンド実行プロセスを使う。優先待ち行列とユーザーロックは分散ロックではなく、実行中APIは返信が来ても中断しない。
+6. 不明なトークン数は保守的見積もり、取得できない残量はnull。提供元の公式残量・課金設定は各社管理画面で確認する。内部予算だけで完全無料は保証しない。
+7. 原則30日で計測・完了候補を掃除する。公開投稿は残す。サーバー停止中は公開が止まる。
+8. 初期投稿はenhancedで現在時刻へ公開し、legacyのみ1〜72時間前へ遡る。
+9. タイムラインのN+1問い合わせ、旧テーブルの論理参照、バージョン付きマイグレーション、認証・公開運用の課題はROADMAP/TODOを参照。
+10. 非公開スナップショットはこの端末のみ。ディスク故障にも備えるには別の安全な保管先が必要。[TODO: 保管先・保持期間]
 
-## Validation Performed
+## Safety
 
-Documentation checks:
-
-- Read all eight existing template Markdown files before editing, then created and reviewed `ROADMAP.md`.
-- Cross-checked route lists with Express router declarations.
-- Cross-checked dependencies/scripts with both `package.json` files and installed top-level versions.
-- Cross-checked environment variable names with example files and `process.env` references without reading secret values.
-- Cross-checked DB tables and relationships with `backend/src/db/schema.js`.
-- Searched runtime source for unresolved `TODO`/`FIXME` markers; none were found outside documentation/dependency artifacts.
-- Reviewed Git status and diff; documentation files are the only files changed by this task.
-- Verified local `HEAD` and `origin/main` both resolve to `3127e0d`.
-
-Tests:
-
-- Most recent execution in the current work session: `npm --prefix backend test` — 15 tests passed, 0 failed.
-- Tests used mock LLM servers and temporary DBs; real provider quota was not used.
-
-Typecheck:
-
-- Most recent execution in the current work session: `npm --prefix frontend run typecheck` — passed.
-
-Lint:
-
-- Not run; no lint script is defined.
-
-Build:
-
-- Most recent execution in the current work session: `npm --prefix frontend run build` — passed.
-
-Manual verification:
-
-- A prior local run supplied in the work session confirmed server startup, DB initialization, provider selection, seed creation, scheduler activity, autonomous generation, and separate user IDs.
-- No new live provider calls or UI interaction were performed for this documentation-only task.
-
-## Current Problems
-
-- External model quality remains nondeterministic despite prompt/output guards.
-- Timeline reply previews use an N+1 query pattern.
-- Several logical database references lack foreign keys.
-- TypeScript strict mode and lint/format tooling are not enabled.
-- JWTs are stored in `localStorage`; session revocation is not implemented.
-- Login limiting and job/LLM coordination are process-local.
-- Production hosting, backup, monitoring, privacy, moderation, and account lifecycle are undefined.
-- Frontend license metadata conflicts between package and lockfile.
-- `frontend/tsconfig.tsbuildinfo` is a generated build cache but is currently tracked by Git.
-- GitHub CI, branch protection, PR templates, and release conventions are not configured.
-- A dedicated GitHub connector is not exposed in the current Codex environment; remote verification succeeded through local Git.
-- The installed GitHub CLI credential is invalid in this environment; normal Git remote reads still work through the existing Git credential path.
-
-## Unresolved Questions
-
-- [TODO: What numerical acceptance criteria should define sufficient daily post density and acceptable content quality?]
-- [TODO: Should the personal project remain local-only or eventually use private always-on hosting?]
-- [TODO: What backup/restore, retention, and deletion policies are required?]
-- [TODO: Which authentication/session hardening items are required before release?]
-- [TODO: What moderation, abuse-reporting, and LLM-provider privacy disclosures are required?]
-- [TODO: What branch-protection, review, versioning, and release rules should GitHub use?]
-- [TODO: What project license should replace or confirm the conflicting current metadata?]
-
-## Next Recommended Action
-
-Use `ROADMAP.md` for the complete ordering. The first recommended slice is:
-
-1. Add quota/usage and generated-versus-saved post measurement.
-2. Add bounded refill and quality checks for discarded or low-quality generated posts.
-3. Introduce a quota-efficient queued post pool and prioritize live replies.
-4. Improve resident profiles, short-term memory, and UI design while maintaining minimum CI/data-safety work.
-5. Reopen public-launch security and operations work only if the release direction changes.
-
-## Important Context
-
-- The application is not using a local LLM.
-- At least one provider API key is required; missing providers are skipped.
-- Tests must remain independent of real keys and quotas.
-- User data is partitioned by `user_id`; ownership scoping is a critical invariant.
-- One background-job-enabled backend process is the current operational model.
-- Ordinary updates should not require deletion of `backend/soloverse.db`.
-- AI-world regeneration intentionally removes AI-side world data but preserves the account and supported user-authored posts.
-- Initial seed posts are intentionally backdated one to 72 hours.
-- Trend generation counts real hashtags and makes no LLM call.
-
-## Warnings
-
-- Never print or commit `backend/.env`, API keys, JWTs, password hashes, or DB contents.
-- Back up a real DB before migration, repair, or world-data manipulation.
-- Do not run multiple background-job-enabled replicas without distributed coordination.
-- Treat only this repository's `origin/main` as authoritative; do not import history from similarly named folders.
-- Do not describe the app as production-ready until the owner resolves the production/security TODOs.
-
-## Suggested Starting Files
-
-- `ai-project-template/PROJECT.md`
-- `ai-project-template/TODO.md`
-- `ai-project-template/ROADMAP.md`
-- `ai-project-template/ARCHITECTURE.md`
-- `ai-project-template/SECURITY.md`
-- `README.md`
-- `backend/server.js`
-- `backend/src/services/llm.js`
-- `backend/src/services/reactionScheduler.js`
-- `backend/src/services/autonomousEngine.js`
-- `backend/src/db/schema.js`
-- `frontend/app/timeline/page.tsx`
+- .recoveryには秘密情報とユーザーデータを含む。Git追加・Push・チャットへの出力は禁止。
+- スナップショット検証用の復元コピーも.recovery内にある。元DBと復元先DBを混同しない。
+- テストに実.envや実DBを使わない。通常アップグレードでDBを削除しない。
+- 運用の切替は再起動で行い、旧版と新版のバックグラウンド実行を並列起動しない。
+- リポジトリはhttps://github.com/yuyuyu02h/soloverse.git。今回リモート照合・GitHub接続確認は再実施していない。
+- 公開専用の認証、モデレーション、ホスティング等は方針変更時に再評価する。現状をproduction-readyとは呼ばない。

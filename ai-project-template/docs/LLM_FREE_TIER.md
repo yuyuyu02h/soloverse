@@ -1,5 +1,7 @@
 # LLM_FREE_TIER.md
 
+> Implementation update (2026-09-16): the capacity estimates and code analysis below describe the pre-pool/legacy implementation as inspected on 2026-09-15. Enhanced generation now has batched candidates, internal budgets, lightweight quality checks and short memory; see [current implementation](../../docs/FREE_CONTENT_PIPELINE.md). Provider quotas were not rechecked during this implementation task. Internal daily limits must not be mistaken for provider allowances.
+
 ## Status and Scope
 
 調査日: 2026-09-15
