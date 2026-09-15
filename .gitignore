@@ -1,0 +1,23 @@
+# DB
+*.db
+*.db-shm
+*.db-wal
+
+# 環境変数
+.env
+.env.local
+backend/.env
+
+# 依存関係
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# ビルド成果物
+frontend/.next/
+
+# OS・テスト・ログ
+.DS_Store
+coverage/
+*.log
+npm-debug.log*
