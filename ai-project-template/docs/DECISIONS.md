@@ -2,7 +2,66 @@
 
 ## Purpose
 
-Record durable technical and product decisions so future developers and AI agents understand why the current implementation exists. Sources are limited to current code, package/config files, the root README, and `docs/improvement-2026-09-15.md`. Git history is unavailable in this directory.
+Record durable technical and product decisions so future developers and AI agents understand why the current implementation exists. Sources are current code, package/config files, the root README, `docs/improvement-2026-09-15.md`, and the available Git history. The history currently contains only the initial project commit, so earlier rationale may still be unavailable.
+
+## 2026-09-15 — Use the GitHub `main` branch as the repository source of truth
+
+### Status
+
+Accepted and verified.
+
+### Context
+
+The project was pushed to GitHub after the initial documentation audit. Future work needs a single remote and branch against which status, history, and proposed changes can be reviewed.
+
+### Decision
+
+- Use `https://github.com/yuyuyu02h/soloverse.git` as the authoritative `origin`.
+- Use `main` as the current default branch.
+- Do not commit or push automatically; those remain explicit owner actions.
+- [TODO: Define branch protection, pull-request review, versioning, and release conventions.]
+
+### Consequences
+
+- Local status and diffs can now be checked against `origin/main`.
+- The current history contains only the initial commit, so it does not explain pre-import decisions.
+- CI and repository governance still need to be configured.
+
+### Source Evidence
+
+- Local Git configuration and `refs/heads/main`
+- Remote `refs/heads/main`, verified on 2026-09-15
+- Initial commit `3127e0d` (`Initial SoloVerse project`)
+
+## 2026-09-15 — Prioritize personal creative quality over public launch readiness
+
+### Status
+
+Accepted by the project owner.
+
+### Context
+
+SoloVerse is currently a personal creation. The owner does not intend to fully launch it as a public service at this stage and wants the product itself—especially post density, conversational meaning, resident personality, and design—to become compelling first.
+
+### Decision
+
+- Optimize first for the project owner's personal use and portfolio-quality completeness.
+- Continue using free cloud LLM APIs and do not add a local LLM.
+- Prioritize AI content quality, content density, user control, design, and maintainability.
+- Defer public-service-only work such as email verification, public abuse operations, large-scale distributed infrastructure, and formal launch processes until the direction changes.
+- Preserve baseline secret protection, tenant isolation, backups, and safe database upgrades even for personal use.
+
+### Consequences
+
+- Step 3 and Step 4 work may proceed alongside minimum reliability work instead of waiting for every production-readiness item.
+- Public deployment must not be described as ready without reopening the deferred security and operations requirements.
+- Success criteria should reflect personal experience quality rather than public growth metrics.
+
+### Source Evidence
+
+- Project owner direction provided on 2026-09-15
+- `PROJECT.md`, “Product Direction”
+- `ROADMAP.md`, “Current Direction”
 
 ## 2026-09-15 — Use cloud LLMs with ordered multi-provider fallback
 
@@ -30,7 +89,7 @@ The README and service comments explicitly describe free-tier conservation, quot
 
 - Local LLM: explicitly excluded by the documented project direction.
 - Single cloud provider: not selected; it would remove the implemented fallback behavior.
-- [TODO: No further alternative analysis is preserved because Git history is unavailable.]
+- [TODO: No further alternative analysis is preserved in the current single-commit Git history.]
 
 ### Consequences
 
@@ -166,8 +225,8 @@ The API and UI comments explicitly state that the account and user posts must re
 ## Undocumented Decisions Requiring Owner Confirmation
 
 - [TODO: Intended production hosting and operational ownership.]
-- [TODO: Whether this remains a private/local prototype or becomes a public service.]
+- [TODO: What event, if any, should trigger reconsideration of a public or limited release.]
 - [TODO: Authentication/session model for production, including localStorage versus HttpOnly cookies.]
 - [TODO: Moderation, privacy disclosure, retention, deletion, and provider-consent policies.]
-- [TODO: Git repository source of truth and branch/release conventions.]
+- [TODO: Git branch protection, pull-request review, versioning, and release conventions.]
 - [TODO: License for the frontend/project; current package metadata conflicts.]

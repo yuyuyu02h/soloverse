@@ -4,6 +4,8 @@ SoloVerseは、自分専用の小さなSNS世界を作るWebアプリです。�
 
 ローカルLLMは使いません。LLM処理はGroq、Gemini、OpenRouterのクラウドAPIを順番に利用し、無料枠の上限や一時障害時には自動で次へ切り替わります。
 
+現時点では一般公開や商用の完全ローンチを目標にせず、個人制作として、AI住人の自然さ、十分な投稿密度、会話の一貫性、見た目の完成度を優先します。公開サービス専用の機能は将来候補ですが、秘密情報と既存データを守る基本対策は維持します。
+
 ## 主な機能
 
 - メールアドレスとパスワードによる登録・ログイン
@@ -86,6 +88,8 @@ GroqのGPT-OSSには低い推論強度と本文に加えた推論用のトーク
 
 無料枠やモデル提供状況は変更されるため、現在の制限は[Groq](https://console.groq.com/docs/rate-limits)、[Gemini](https://ai.google.dev/gemini-api/docs/rate-limits)、[OpenRouter](https://openrouter.ai/docs/faq)のダッシュボードと公式資料で確認してください。GeminiのFree Tierへ送った内容はGoogleの製品改善に使用される場合があります。機密情報や第三者の個人情報をプロンプトへ含めないでください。
 
+2026-09-15時点の無料枠、更新周期、現在の生成頻度から見た消費見込み、無料のまま投稿数と品質を上げる案は [LLM_FREE_TIER.md](ai-project-template/docs/LLM_FREE_TIER.md) にまとめています。
+
 ## 環境変数
 
 | 変数 | 必須 | 既定値 | 用途 |
@@ -125,6 +129,20 @@ npm --prefix frontend run typecheck
 バックエンドのテストは一時DBと模擬LLM APIを使い、Groq → Gemini → OpenRouterのフォールバック、登録、オンボーディング、初期投稿、投稿、返信ツリー、いいね、リアクションキュー、ユーザー間のアクセス分離を実API経由で確認します。実際のAPIキーや課金枠は消費しません。
 
 `world-regressions.test.js` は初期生成の同時リクエスト、返信の時系列、実投稿だけのトレンド集計、質問への返信予約、初回成長待ちを検証します。今回の4段階の改善記録は [docs/improvement-2026-09-15.md](docs/improvement-2026-09-15.md) にあります。
+
+## 開発ロードマップと引き継ぎ
+
+今後の作業は、次の順で進める前提に整理しています。
+
+1. リリース方針、Git運用、CIなどの品質基盤
+2. DB移行、キュー、データ整合性、テスト
+3. セキュリティ、プライバシー、モデレーション
+4. デザインシステム、アクセシビリティ、主要画面のUX
+5. AI住人の人格・記憶・会話品質とLLM評価
+6. 検索、世界設定、イベント等のプロダクト機能
+7. 個人利用での検証・改善。常時ホスティングする場合のみデプロイ、監視、バックアップを拡張
+
+優先度、依存関係、完了条件、将来候補の詳細は [ROADMAP.md](ai-project-template/ROADMAP.md) を参照してください。現在の短期タスクは [TODO.md](ai-project-template/TODO.md)、構成は [ARCHITECTURE.md](ai-project-template/ARCHITECTURE.md)、安全上の注意は [SECURITY.md](ai-project-template/SECURITY.md)、次の担当者向けの状態は [HANDOFF.md](ai-project-template/docs/HANDOFF.md) にあります。
 
 ## API概要
 

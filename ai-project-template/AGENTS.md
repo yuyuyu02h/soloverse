@@ -13,6 +13,8 @@ Also read:
 - SECURITY.md
 - WORKFLOW.md
 - TODO.md
+- ROADMAP.md
+- docs/LLM_FREE_TIER.md when changing providers, model order, generation cadence, quota handling, or LLM usage
 
 when relevant to the task.
 
@@ -123,6 +125,7 @@ Update:
 
 - ARCHITECTURE.md for architectural changes
 - TODO.md when task status changes
+- ROADMAP.md when milestone scope, ordering, or completion status changes
 - docs/DECISIONS.md for important technical decisions
 - docs/HANDOFF.md when handing work to another agent/session
 
@@ -156,4 +159,4 @@ When requirements conflict, identify the conflict instead of silently choosing o
 12. For backend changes, run `npm --prefix backend test`. For frontend changes, run both `npm --prefix frontend run typecheck` and `npm --prefix frontend run build`.
 13. No lint or formatting script currently exists. Do not claim lint passed; [TODO: choose and configure lint/format tooling].
 14. Update `ARCHITECTURE.md`, `SECURITY.md`, `TODO.md`, `docs/DECISIONS.md`, and `docs/HANDOFF.md` only when the change affects their subject.
-15. The current project root has no `.git` metadata. Do not infer branch or commit history from similarly named sibling directories. [TODO: initialize or restore the authoritative Git repository and define branch/commit conventions].
+15. The authoritative repository is `https://github.com/yuyuyu02h/soloverse.git`; the default branch is `main`. Review local status and diff before completion, but do not commit or push unless the project owner explicitly requests it. [TODO: define branch, pull-request, review, and release conventions].

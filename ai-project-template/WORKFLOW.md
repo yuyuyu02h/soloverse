@@ -12,6 +12,7 @@ Read:
 - `ai-project-template/AGENTS.md`
 - `ai-project-template/PROJECT.md`
 - relevant sections of `ARCHITECTURE.md`, `SECURITY.md`, and `TODO.md`
+- `ROADMAP.md` when choosing, scoping, or completing milestone work
 - root `README.md`
 - `docs/improvement-2026-09-15.md` when changing existing world behavior
 
@@ -113,7 +114,7 @@ Manual checks that call a configured provider can consume free-tier quota; state
 
 ## 6. Review
 
-Review the final changed-file list and, when Git is available, the diff.
+Review the final changed-file list, status, and diff. The authoritative remote is `origin` (`https://github.com/yuyuyu02h/soloverse.git`) and the default branch is `main`.
 
 Check for:
 
@@ -128,12 +129,7 @@ Check for:
 - package-lock changes without a requested dependency change
 - documentation made inaccurate by the implementation
 
-Current repository note:
-
-```text
-The project root currently has no .git directory, so Git status, history, and diff cannot be reviewed.
-[TODO: Restore or initialize the authoritative repository before relying on Git workflow steps.]
-```
+Do not commit, push, force-push, or change branch protections unless the project owner explicitly requests it. [TODO: Define the normal branch, pull-request, review, and release conventions.]
 
 ## 7. Document
 
@@ -143,6 +139,7 @@ Update only the documents affected by the work:
 - `ARCHITECTURE.md`: routes, data flow, storage, background jobs, or external-service changes
 - `SECURITY.md`: auth, authorization, secrets, data, or external-service risk changes
 - `TODO.md`: newly found or completed work
+- `ROADMAP.md`: milestone ordering, scope, dependencies, or completion status
 - `docs/DECISIONS.md`: durable technical/product choices and their trade-offs
 - `docs/HANDOFF.md`: current state, validation, unresolved work, and starting points
 - root `README.md`: developer-facing setup and operation

@@ -6,9 +6,7 @@
 
 ## Current Objective
 
-The AI-development documentation template has been adapted to the current SoloVerse implementation. The next product/engineering objective is not established by code or documentation.
-
-[TODO: Project owner selects the next milestone.]
+The AI-development documentation is aligned with the current implementation. The active direction is a personal creative-quality milestone, not a full public launch: improve content density, conversational meaning, resident consistency, UI polish, and free-tier efficiency.
 
 ## Current State
 
@@ -23,7 +21,7 @@ SoloVerse is a two-package local web application:
 
 The implemented flow includes registration/login, onboarding, per-user AI residents, seed posts, root and nested posts, likes, notifications, hashtag trends, autonomous posts, resident growth, absence reactions, polling updates, and explicit AI-world regeneration that preserves user-authored data.
 
-The current project root does not contain `.git`, CI configuration, deployment configuration, or a root npm workspace manifest.
+The project is a Git repository whose `origin/main` is `https://github.com/yuyuyu02h/soloverse.git`. Local `HEAD` and the remote branch were verified at initial commit `3127e0d`. CI configuration, deployment configuration, and a root npm workspace manifest are not present.
 
 ## Completed In This Documentation Session
 
@@ -35,20 +33,26 @@ The current project root does not contain `.git`, CI configuration, deployment c
 - Added project-specific AI-agent and development workflow rules.
 - Recorded verified technical decisions and open decisions.
 - Recorded known bugs, security work, technical debt, and owner questions.
-- Attempted Git inspection; confirmed no `.git` exists in this project root. Did not attribute history from sibling projects.
+- Verified the local Git repository, `origin` URL, `main` branch, initial commit, and matching remote head.
+- Added `ROADMAP.md` with priorities, dependencies, implementation steps, and exit criteria across engineering, security, design, AI quality, product features, deployment, and beta validation.
+- Recorded the owner's decision to prioritize personal creative quality and defer public-launch-only requirements.
+- Added a dated free-tier analysis and quota-efficient content strategy in `docs/LLM_FREE_TIER.md`.
 
 ## Files Changed
 
 Documentation only:
 
+- `README.md`
 - `ai-project-template/AGENTS.md`
 - `ai-project-template/PROJECT.md`
 - `ai-project-template/ARCHITECTURE.md`
 - `ai-project-template/SECURITY.md`
 - `ai-project-template/WORKFLOW.md`
 - `ai-project-template/TODO.md`
+- `ai-project-template/ROADMAP.md`
 - `ai-project-template/docs/DECISIONS.md`
 - `ai-project-template/docs/HANDOFF.md`
+- `ai-project-template/docs/LLM_FREE_TIER.md`
 
 No source code, package manifest, lockfile, environment file, or database was modified by this documentation task.
 
@@ -56,13 +60,14 @@ No source code, package manifest, lockfile, environment file, or database was mo
 
 Documentation checks:
 
-- Read all eight template Markdown files before editing.
+- Read all eight existing template Markdown files before editing, then created and reviewed `ROADMAP.md`.
 - Cross-checked route lists with Express router declarations.
 - Cross-checked dependencies/scripts with both `package.json` files and installed top-level versions.
 - Cross-checked environment variable names with example files and `process.env` references without reading secret values.
 - Cross-checked DB tables and relationships with `backend/src/db/schema.js`.
 - Searched runtime source for unresolved `TODO`/`FIXME` markers; none were found outside documentation/dependency artifacts.
-- [TODO: Git diff/status review is unavailable until the authoritative `.git` metadata is restored or initialized.]
+- Reviewed Git status and diff; documentation files are the only files changed by this task.
+- Verified local `HEAD` and `origin/main` both resolve to `3127e0d`.
 
 Tests:
 
@@ -96,27 +101,30 @@ Manual verification:
 - Login limiting and job/LLM coordination are process-local.
 - Production hosting, backup, monitoring, privacy, moderation, and account lifecycle are undefined.
 - Frontend license metadata conflicts between package and lockfile.
-- Git history and change status are unavailable in this directory.
+- `frontend/tsconfig.tsbuildinfo` is a generated build cache but is currently tracked by Git.
+- GitHub CI, branch protection, PR templates, and release conventions are not configured.
+- A dedicated GitHub connector is not exposed in the current Codex environment; remote verification succeeded through local Git.
+- The installed GitHub CLI credential is invalid in this environment; normal Git remote reads still work through the existing Git credential path.
 
 ## Unresolved Questions
 
-- [TODO: Is the intended release local/private or publicly accessible?]
-- [TODO: What is the next milestone and its acceptance criteria?]
-- [TODO: What hosting provider, domain, data region, availability target, and budget should be used?]
-- [TODO: What user scale and performance targets are expected?]
+- [TODO: What numerical acceptance criteria should define sufficient daily post density and acceptable content quality?]
+- [TODO: Should the personal project remain local-only or eventually use private always-on hosting?]
 - [TODO: What backup/restore, retention, and deletion policies are required?]
 - [TODO: Which authentication/session hardening items are required before release?]
 - [TODO: What moderation, abuse-reporting, and LLM-provider privacy disclosures are required?]
-- [TODO: Should Git history be initialized here or restored from another authoritative repository?]
+- [TODO: What branch-protection, review, versioning, and release rules should GitHub use?]
 - [TODO: What project license should replace or confirm the conflicting current metadata?]
 
 ## Next Recommended Action
 
-The ordering below is provisional and requires owner confirmation:
+Use `ROADMAP.md` for the complete ordering. The first recommended slice is:
 
-1. [TODO: Choose the release target and next milestone.]
-2. [TODO: Establish the authoritative Git repository/history and license.]
-3. If public hosting is intended, prioritize the security, privacy, backup, moderation, and single-runner deployment decisions in `TODO.md` before adding product features.
+1. Add quota/usage and generated-versus-saved post measurement.
+2. Add bounded refill and quality checks for discarded or low-quality generated posts.
+3. Introduce a quota-efficient queued post pool and prioritize live replies.
+4. Improve resident profiles, short-term memory, and UI design while maintaining minimum CI/data-safety work.
+5. Reopen public-launch security and operations work only if the release direction changes.
 
 ## Important Context
 
@@ -135,13 +143,14 @@ The ordering below is provisional and requires owner confirmation:
 - Never print or commit `backend/.env`, API keys, JWTs, password hashes, or DB contents.
 - Back up a real DB before migration, repair, or world-data manipulation.
 - Do not run multiple background-job-enabled replicas without distributed coordination.
-- Do not infer current Git history from `../soloverse2` or other similarly named folders.
+- Treat only this repository's `origin/main` as authoritative; do not import history from similarly named folders.
 - Do not describe the app as production-ready until the owner resolves the production/security TODOs.
 
 ## Suggested Starting Files
 
 - `ai-project-template/PROJECT.md`
 - `ai-project-template/TODO.md`
+- `ai-project-template/ROADMAP.md`
 - `ai-project-template/ARCHITECTURE.md`
 - `ai-project-template/SECURITY.md`
 - `README.md`

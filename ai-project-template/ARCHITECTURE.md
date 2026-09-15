@@ -41,9 +41,11 @@ SQLite via @libsql/client
 │   ├── SECURITY.md
 │   ├── WORKFLOW.md
 │   ├── TODO.md
+│   ├── ROADMAP.md                    Prioritized product/engineering plan
 │   └── docs/
 │       ├── DECISIONS.md
-│       └── HANDOFF.md
+│       ├── HANDOFF.md
+│       └── LLM_FREE_TIER.md            Dated quota facts and free-first strategy
 ├── backend/
 │   ├── server.js                     Express setup and background timers
 │   ├── src/
@@ -62,7 +64,8 @@ SQLite via @libsql/client
 ├── frontend/
 │   ├── app/                           Next.js App Router pages and global CSS
 │   ├── components/                    Post, reply, notification, trend UI
-│   └── lib/api.ts                     HTTP client and localStorage session data
+│   ├── lib/api.ts                     HTTP client and localStorage session data
+│   └── tsconfig.tsbuildinfo           Tracked build cache; planned for removal from Git
 └── docs/
     └── improvement-2026-09-15.md      Investigation and improvement record
 ```
@@ -246,7 +249,7 @@ No deployment manifest, container definition, CI workflow, process manager, or i
 - Frontend and backend are separate npm packages; there is no root workspace manifest.
 - Polling is used instead of push-based updates.
 - LLM provider APIs must support the OpenAI chat-completions request/response shape used by the gateway.
-- The backend depends on Node's built-in`fetch`, requiring the documented Node version.
+- The backend depends on Node's built-in `fetch`, requiring the documented Node version.
 - The application UI and prompt rules are primarily Japanese.
 
 ## Known Technical Debt

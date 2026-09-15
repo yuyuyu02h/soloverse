@@ -216,4 +216,4 @@ For authentication, authorization, database, or external-service changes:
 | Low/Integrity | Several logical relationships lack DB foreign keys | API ownership checks and regeneration cleanup reduce risk; schema hardening remains open |
 | Low | CSP/HSTS are not configured in the application | Other security headers exist; production proxy/deployment is `[TODO]` |
 
-These severities are based on the current code and change materially depending on whether the application remains local/private or becomes publicly accessible.
+The accepted current scope is personal/local use, not public launch. Public-only findings remain recorded for future reconsideration, while secret protection, external-LLM data awareness, tenant isolation, and recoverable database handling still apply now. Severity must be reassessed if the release scope changes.
