@@ -18,6 +18,10 @@ const {
   processPendingCelebrityScenes,
   decorateTimelinePosts,
   celebrityComments,
+  sceneCounts,
+  celebrityNotificationState,
+  setCelebrityNotificationsEnabled,
+  markCelebrityNotificationsRead,
 } = require('../src/services/celebrityMode');
 const { processReactionQueue } = require('../src/services/reactionScheduler');
 const { runCharacterGrowth } = require('../src/services/autonomousEngine');
@@ -72,8 +76,18 @@ test('admiredだけが裏側で有名人モードになる', async () => {
   assert.equal(await experienceMode('friend'), 'community');
 });
 
+test('投稿直後は0件で、最初はゆっくり、その後大きく増える', () => {
+  const started = Date.now();
+  const scene = { target_likes: 80000, target_comments: 2000, started_at: new Date(started).toISOString() };
+  assert.deepEqual(sceneCounts(scene, started), { likes: 0, comments: 0 });
+  assert.ok(sceneCounts(scene, started + 10000).likes < 10);
+  assert.ok(sceneCounts(scene, started + 60000).likes < 100);
+  assert.ok(sceneCounts(scene, started + 300000).likes > sceneCounts(scene, started + 60000).likes);
+  assert.ok(sceneCounts(scene, started + 3600000).likes > 10000);
+});
+
 test('大量のアカウントやlike行を作らず、一つの観客シーンで数字を演出する', async () => {
-  const startedAt = new Date(Date.now() - 5 * 60000).toISOString();
+  const startedAt = new Date(Date.now() - 2 * 60 * 60000).toISOString();
   await db.execute({
     sql: "INSERT INTO posts(id,user_id,author_id,author_type,content,created_at,ai) VALUES('star-post','star','star','user','映画のラストが今も心に残っている。',?,0)",
     args: [startedAt],
@@ -93,7 +107,7 @@ test('司令塔を一度だけ呼び、代表コメントだけを保存する',
   assert.equal(requests.length, 1);
   assert.match(requests[0].messages.at(-1).content, /代表コメント8件/);
   assert.equal((await db.execute("SELECT status FROM celebrity_scenes WHERE post_id='star-post'")).rows[0].status, 'ready');
-  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM celebrity_comments WHERE scene_post_id='star-post'")).rows[0].n, 8);
+  assert.equal((await db.execute("SELECT COUNT(*) AS n FROM celebrity_comments WHERE scene_post_id='star-post'")).rows[0].n, 150);
 
   const decorated = await decorateTimelinePosts('star', [{ id: 'star-post', like_count: 0, reply_count: 0 }]);
   assert.equal(decorated[0].experience_mode, 'celebrity');
@@ -103,8 +117,23 @@ test('司令塔を一度だけ呼び、代表コメントだけを保存する',
   const ownComments = await celebrityComments('star', ['star-post'], 8);
   assert.equal(ownComments.get('star-post').length, 8);
   assert.equal(ownComments.get('star-post')[0].synthetic, true);
+  assert.equal((await celebrityComments('star', ['star-post'], 150)).get('star-post').length, 150);
   const foreignComments = await celebrityComments('other', ['star-post'], 8);
   assert.equal(foreignComments.size, 0);
+});
+
+test('有名人通知は増え、既読とON/OFFを保存できる', async () => {
+  const initial = await celebrityNotificationState('star');
+  assert.equal(initial.enabled, true);
+  assert.ok(initial.unreadCount >= 150);
+  assert.ok(initial.notifications.some(item => item.type === 'celebrity_like'));
+  assert.ok(initial.notifications.some(item => item.type === 'celebrity_reply'));
+  await markCelebrityNotificationsRead('star');
+  assert.equal((await celebrityNotificationState('star')).unreadCount, 0);
+  await setCelebrityNotificationsEnabled('star', false);
+  assert.deepEqual((await celebrityNotificationState('star')).notifications, []);
+  await setCelebrityNotificationsEnabled('star', true);
+  assert.equal((await celebrityNotificationState('star')).unreadCount, 0);
 });
 
 test('有名人モードでは通常リアクションの残骸と住人増殖を止める', async () => {

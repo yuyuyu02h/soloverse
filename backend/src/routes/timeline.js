@@ -8,6 +8,9 @@ const {
   createCelebrityScene,
   decorateTimelinePosts,
   celebrityComments,
+  celebrityNotificationState,
+  setCelebrityNotificationsEnabled,
+  markCelebrityNotificationsRead,
 } = require('../services/celebrityMode');
 
 const router = express.Router();
@@ -248,7 +251,7 @@ router.get('/replies/:postId', authenticate, async (req, res) => {
             ORDER BY datetime(p.created_at) ASC, thread.depth ASC, p.id ASC`,
       args: [postId, userId, userId, userId],
     });
-    const audience = await celebrityComments(userId, [postId], 8);
+    const audience = await celebrityComments(userId, [postId], 150);
     const combined = [...replies.rows, ...(audience.get(postId) || [])]
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     res.json({ replies: combined });
@@ -269,9 +272,15 @@ router.get('/notifications', authenticate, async (req, res) => {
             ORDER BY datetime(n.created_at) DESC, n.id DESC LIMIT 50`,
       args: [userId],
     });
-    const unreadCount = notifs.rows.filter(n => !n.read).length;
+    const celebrity = await celebrityNotificationState(userId);
+    const all = [...notifs.rows, ...celebrity.notifications]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || b.id.localeCompare(a.id))
+      .slice(0, 50);
+    const normalUnread = await db.execute({ sql: 'SELECT COUNT(*) AS count FROM notifications WHERE user_id=? AND read=0', args: [userId] });
+    const unreadCount = Number(normalUnread.rows[0]?.count || 0) + celebrity.unreadCount;
     await db.execute({ sql: 'UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0', args: [userId] });
-    res.json({ notifications: notifs.rows, unreadCount });
+    await markCelebrityNotificationsRead(userId);
+    res.json({ notifications: all, unreadCount, celebrityNotificationsEnabled: celebrity.enabled, celebrityMode: (await experienceMode(userId)) === 'celebrity' });
   } catch (e) { res.status(500).json({ error: '通知取得に失敗しました' }); }
 });
 
@@ -281,8 +290,17 @@ router.get('/notifications/unread-count', authenticate, async (req, res) => {
     const result = await db.execute({
       sql: 'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND read = 0', args: [userId],
     });
-    res.json({ count: result.rows[0]?.count || 0 });
+    const celebrity = await celebrityNotificationState(userId);
+    res.json({ count: Number(result.rows[0]?.count || 0) + celebrity.unreadCount, celebrityNotificationsEnabled: celebrity.enabled });
   } catch (_) { res.json({ count: 0 }); }
+});
+
+router.post('/notifications/celebrity-settings', authenticate, async (req, res) => {
+  if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: '通知設定が不正です' });
+  try {
+    await setCelebrityNotificationsEnabled(req.userId, req.body.enabled);
+    res.json({ enabled: req.body.enabled });
+  } catch (e) { res.status(500).json({ error: '通知設定の保存に失敗しました' }); }
 });
 
 // ─── トレンド ──────────────────────────────────────────

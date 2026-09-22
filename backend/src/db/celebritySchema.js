@@ -33,6 +33,12 @@ async function initCelebritySchema(db) {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_celebrity_comments_post
       ON celebrity_comments(user_id, scene_post_id, created_at)`,
+    `CREATE TABLE IF NOT EXISTS celebrity_notification_preferences (
+      user_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_read_at TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`,
   ], 'write');
 }
 

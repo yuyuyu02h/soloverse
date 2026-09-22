@@ -17,6 +17,20 @@ const AUDIENCE_IDENTITIES = [
   ['カナ', 'kana_scene', 'Avery'],
   ['ソラ', 'sora_watch', 'Oscar'],
 ];
+const VISIBLE_COMMENT_LIMIT = 150;
+const COMMENT_ENDINGS = [
+  '何度も読み返してしまった。', 'この言葉、しばらく覚えていそう。',
+  '続きも楽しみにしています。', 'この視点はなかった。',
+  '今日いちばん印象に残った投稿。', '友達にも話したくなった。',
+  '言葉にしてくれてありがとう。', 'つい反応したくなった。',
+  '同じ気持ちの人、きっと多いと思う。', 'もう少し聞いてみたい。',
+  '短いのに余韻がすごい。', '今の自分にちょうど響いた。',
+  'この話、まだ考えている。', 'なんだか元気をもらった。',
+  '思わず保存してしまった。', 'こういう投稿を待っていた。',
+  'ここの表現が好き。', '別の角度からも聞いてみたい。',
+  '読んでよかった。', 'まさにそれだと思った。',
+];
+const LIKE_MILESTONES = [1, 5, 12, 25, 50, 100, 200, 350, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 15000, 20000, 30000, 50000, 75000, 100000];
 
 function stableNumber(value, salt = '') {
   return Number.parseInt(createHash('sha256').update(`${salt}:${value}`).digest('hex').slice(0, 8), 16);
@@ -24,8 +38,13 @@ function stableNumber(value, salt = '') {
 
 function currentCount(target, startedAt, timeConstantSeconds, now = Date.now()) {
   const elapsedSeconds = Math.max(0, (now - Date.parse(startedAt)) / 1000);
-  const progress = Math.min(1, 0.012 + 0.988 * (1 - Math.exp(-elapsedSeconds / timeConstantSeconds)));
-  return Math.max(1, Math.min(target, Math.floor(target * progress)));
+  const progress = 1 - Math.exp(-Math.pow(elapsedSeconds / timeConstantSeconds, 2.3));
+  return Math.max(0, Math.min(target, Math.floor(target * progress)));
+}
+
+function timeForCount(target, count, timeConstantSeconds) {
+  if (count >= target) return Number.POSITIVE_INFINITY;
+  return timeConstantSeconds * Math.pow(-Math.log(1 - count / target), 1 / 2.3);
 }
 
 function sceneCounts(scene, now = Date.now()) {
@@ -122,17 +141,19 @@ function normalizeDirector(value, postContent) {
 function commentRows(scene, director) {
   const identityOffset = stableNumber(scene.post_id, 'identity') % AUDIENCE_IDENTITIES.length;
   const baseTime = Date.parse(scene.started_at);
-  return director.comments.map((comment, index) => {
+  return Array.from({ length: VISIBLE_COMMENT_LIMIT }, (_, index) => {
+    const comment = director.comments[index % director.comments.length];
     const identity = AUDIENCE_IDENTITIES[(identityOffset + index) % AUDIENCE_IDENTITIES.length];
-    const delaySeconds = 15 + index * 21 + stableNumber(`${scene.post_id}:${index}`, 'delay') % 24;
-    const share = Math.max(2, 13 - index);
-    const likeCount = Math.max(1, Math.floor(Number(scene.target_comments) * share / 30));
+    const delaySeconds = Math.ceil(timeForCount(Number(scene.target_comments), index + 1, 1800)) + 1;
+    const variant = Math.floor(index / director.comments.length);
+    const content = variant === 0 ? comment.content : `${comment.content} ${COMMENT_ENDINGS[(variant + index) % COMMENT_ENDINGS.length]}`.slice(0, 140);
+    const likeCount = Math.max(1, Math.floor(Number(scene.target_comments) / (8 + index)));
     return {
       id: randomUUID(),
       name: identity[0],
-      handle: identity[1],
+      handle: `${identity[1]}_${index + 1}`,
       avatarSeed: identity[2],
-      content: comment.content,
+      content,
       category: comment.category,
       likeCount,
       createdAt: new Date(baseTime + delaySeconds * 1000).toISOString(),
@@ -200,7 +221,6 @@ async function processPendingCelebrityScenes(limit = 3) {
       await saveDirectorResult(scene, director, 'ready');
       processed++;
     } catch (error) {
-      if (error?.code === 'LLM_DEFERRED') continue;
       console.warn(`[Celebrity] Director fallback for ${scene.post_id}:`, error.message);
       await saveDirectorResult(scene, normalizeDirector(null, scene.content), 'fallback');
       processed++;
@@ -232,7 +252,7 @@ async function decorateTimelinePosts(userId, posts, now = Date.now()) {
   });
 }
 
-function toPost(comment) {
+function toPost(comment, now = Date.now()) {
   return {
     id: comment.id,
     user_id: comment.user_id,
@@ -246,7 +266,7 @@ function toPost(comment) {
     author_name: comment.author_name,
     author_handle: comment.author_handle,
     avatar_seed: comment.avatar_seed,
-    like_count: Number(comment.like_count),
+    like_count: currentCount(Number(comment.like_count), comment.created_at, 900, now),
     reply_count: 0,
     user_liked: 0,
     depth: 0,
@@ -271,6 +291,57 @@ async function celebrityComments(userId, postIds, perPost = 8) {
   return result;
 }
 
+async function celebrityNotificationState(userId, now = Date.now()) {
+  const preference = await db.execute({
+    sql: 'SELECT enabled,last_read_at FROM celebrity_notification_preferences WHERE user_id=?', args: [userId],
+  });
+  const enabled = preference.rows[0]?.enabled !== 0;
+  if (!enabled) return { enabled, notifications: [], unreadCount: 0 };
+  const readAt = Date.parse(preference.rows[0]?.last_read_at || '') || 0;
+  const scenes = await db.execute({
+    sql: 'SELECT s.post_id,s.started_at,s.target_likes,p.content FROM celebrity_scenes s JOIN posts p ON p.id=s.post_id WHERE s.user_id=? ORDER BY datetime(s.started_at) DESC LIMIT 10',
+    args: [userId],
+  });
+  const notifications = [];
+  for (const scene of scenes.rows) {
+    const started = Date.parse(scene.started_at);
+    const likes = currentCount(Number(scene.target_likes), scene.started_at, 1200, now);
+    for (const milestone of LIKE_MILESTONES) {
+      if (milestone > likes || milestone >= Number(scene.target_likes)) break;
+      const at = new Date(started + Math.ceil(timeForCount(Number(scene.target_likes), milestone, 1200)) * 1000).toISOString();
+      notifications.push({ id: `celebrity-like:${scene.post_id}:${milestone}`, type: 'celebrity_like', character_name: 'ファン', character_handle: 'audience', avatar_seed: scene.post_id, audience_count: milestone, post_content: scene.content, post_id: scene.post_id, created_at: at, read: Date.parse(at) <= readAt ? 1 : 0 });
+    }
+  }
+  const comments = await db.execute({
+    sql: `SELECT c.id,c.author_name,c.author_handle,c.avatar_seed,c.content,c.scene_post_id,c.created_at,p.content AS post_content
+          FROM celebrity_comments c JOIN posts p ON p.id=c.scene_post_id
+          WHERE c.user_id=? AND datetime(c.created_at)<=datetime(?)
+          ORDER BY datetime(c.created_at) DESC LIMIT 300`,
+    args: [userId, new Date(now).toISOString()],
+  });
+  for (const comment of comments.rows) {
+    notifications.push({ id: `celebrity-reply:${comment.id}`, type: 'celebrity_reply', character_name: comment.author_name, character_handle: comment.author_handle, avatar_seed: comment.avatar_seed, post_content: comment.post_content, post_id: comment.scene_post_id, created_at: comment.created_at, read: Date.parse(comment.created_at) <= readAt ? 1 : 0 });
+  }
+  notifications.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.id.localeCompare(a.id));
+  return { enabled, notifications: notifications.slice(0, 50), unreadCount: notifications.filter(n => !n.read).length };
+}
+
+async function setCelebrityNotificationsEnabled(userId, enabled) {
+  await db.execute({
+    sql: `INSERT INTO celebrity_notification_preferences(user_id,enabled,last_read_at) VALUES(?,?,?)
+          ON CONFLICT(user_id) DO UPDATE SET enabled=excluded.enabled,last_read_at=excluded.last_read_at`,
+    args: [userId, enabled ? 1 : 0, new Date().toISOString()],
+  });
+}
+
+async function markCelebrityNotificationsRead(userId) {
+  await db.execute({
+    sql: `INSERT INTO celebrity_notification_preferences(user_id,enabled,last_read_at) VALUES(?,1,?)
+          ON CONFLICT(user_id) DO UPDATE SET last_read_at=excluded.last_read_at`,
+    args: [userId, new Date().toISOString()],
+  });
+}
+
 module.exports = {
   experienceMode,
   createCelebrityScene,
@@ -278,4 +349,7 @@ module.exports = {
   decorateTimelinePosts,
   celebrityComments,
   sceneCounts,
+  celebrityNotificationState,
+  setCelebrityNotificationsEnabled,
+  markCelebrityNotificationsRead,
 };

@@ -144,6 +144,28 @@ export default function TimelinePage() {
     return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
   }, []);
 
+  // 有名人体験の数字と通知は短い間隔で更新し、反応が増えていく様子を見せる。
+  useEffect(() => {
+    if (!user) return;
+    let busy = false;
+    const interval = setInterval(async () => {
+      const ids = postsRef.current.filter(post => post.experience_mode === 'celebrity').map(post => post.id).slice(0, 100);
+      if (!ids.length || busy) return;
+      busy = true;
+      try {
+        const [result, notifications] = await Promise.all([
+          api.get('/api/timeline?ids=' + encodeURIComponent(ids.join(','))),
+          api.get('/api/timeline/notifications/unread-count'),
+        ]);
+        if (!mountedRef.current) return;
+        setPosts(previous => mergePosts(result.posts, previous));
+        setUnreadCount(notifications.count);
+      } catch (e) { console.error('Celebrity refresh error:', e); }
+      finally { busy = false; }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [user?.userId]);
+
   // ─── 無限スクロール ────────────────────────────────────
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || loading || !hasMore) return;

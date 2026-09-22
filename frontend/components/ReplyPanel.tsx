@@ -42,7 +42,7 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
       .finally(() => { refreshing = false; if (!cancelled) setLoading(false); });
     };
     void refresh();
-    const interval = setInterval(refresh, 30000);
+    const interval = setInterval(refresh, post.experience_mode === 'celebrity' ? 5000 : 30000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [post.id]);
 

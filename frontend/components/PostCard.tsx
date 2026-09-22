@@ -150,7 +150,9 @@ export function PostCard({ post, onLike, onOpenReplies, highlight = false, compa
             cursor: 'pointer', fontWeight: 500,
           }}
         >
-          {formatCount(Number(post.reply_count) - 2)}件の返信をもっと見る
+          {post.experience_mode === 'celebrity'
+            ? '返信をもっと見る（最大150件）'
+            : `${formatCount(Number(post.reply_count) - 2)}件の返信をもっと見る`}
         </div>
       )}
     </div>
