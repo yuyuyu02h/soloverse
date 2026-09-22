@@ -173,6 +173,7 @@ Known gaps / decisions required:
 ## External LLM Services
 
 - Groq, Gemini, and OpenRouter receive server-generated prompts that can include user interests, posts, and recent conversation text.
+- In `admired` worlds, the audience-director prompt sends the new user post plus world interests, atmosphere, and exclusions. Simulated engagement counts and local audience identities are not sent to the provider.
 - API availability, data handling, retention, and free-tier terms are external dependencies and can change.
 - Provider responses are untrusted input. Continue to bound lengths, validate JSON, and avoid unsafe HTML rendering.
 - The current code logs provider/model labels and provider error messages, but not prompts or API keys. Review error logging before production because provider messages are externally controlled.
@@ -198,7 +199,7 @@ Require explicit user approval before:
 - modifying production authorization controls
 - force pushing or rewriting Git history
 
-The in-app world regeneration endpoint is intentionally destructive only to the authenticated user's AI residents, AI posts, AI reactions, AI notifications, trends, and growth data. It preserves the account and user-authored posts, and the UI presents a confirmation first.
+The in-app world regeneration endpoint is intentionally destructive only to the authenticated user's AI residents, AI posts, AI reactions, celebrity audience scenes/comments, AI notifications, trends, and growth data. It preserves the account and user-authored posts, and the UI presents a confirmation first.
 
 ## Security Validation Checklist
 

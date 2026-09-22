@@ -67,6 +67,7 @@ function startBackgroundJobs() {
     queueRunning = true;
     try {
       await processReactionQueue();
+      await require('./src/services/celebrityMode').processPendingCelebrityScenes();
       await require('./src/services/contentPipeline').publishAll();
     }
     catch (e) { console.error('[Queue] Error:', e.message); }

@@ -132,6 +132,7 @@ router.post('/regenerate', authenticate, async (req, res) => {
 
     await serializeWorldTask(userId, async () => {
       const statements = [
+        { sql: 'DELETE FROM celebrity_scenes WHERE user_id = ?', args: [userId] },
         { sql: 'DELETE FROM content_candidates WHERE user_id = ?', args: [userId] },
         { sql: 'DELETE FROM content_pool_state WHERE user_id = ?', args: [userId] },
         { sql: 'DELETE FROM reaction_queue WHERE user_id = ?', args: [userId] },

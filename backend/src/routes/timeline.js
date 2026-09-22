@@ -3,6 +3,12 @@ const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { authMiddleware: authenticate } = require('../middleware/auth');
 const { scheduleReactions, scheduleReplyReactions, generateAITimelinePosts } = require('../services/reactionScheduler');
+const {
+  experienceMode,
+  createCelebrityScene,
+  decorateTimelinePosts,
+  celebrityComments,
+} = require('../services/celebrityMode');
 
 const router = express.Router();
 
@@ -74,10 +80,12 @@ router.get('/', authenticate, async (req, res) => {
       args = [userId, userId, String(req.query.before), String(req.query.before), String(req.query.beforeId), limit];
     }
     const posts = await db.execute({ sql, args });
+    const decoratedPosts = await decorateTimelinePosts(userId, posts.rows);
 
     // 各投稿の直近リプライを最大2件取得（プレビュー用）
-    const postIds = posts.rows.map(p => p.id);
+    const postIds = decoratedPosts.map(p => p.id);
     let repliesMap = {};
+    const audienceMap = await celebrityComments(userId, postIds, 2);
 
     for (const pid of postIds) {
       const replies = await db.execute({
@@ -95,10 +103,13 @@ router.get('/', authenticate, async (req, res) => {
               LIMIT 2`,
         args: [userId, pid, userId],
       });
-      if (replies.rows.length > 0) repliesMap[pid] = replies.rows.reverse();
+      const combined = [...replies.rows, ...(audienceMap.get(pid) || [])]
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .slice(-2);
+      if (combined.length > 0) repliesMap[pid] = combined;
     }
 
-    const enriched = posts.rows.map(p => ({
+    const enriched = decoratedPosts.map(p => ({
       ...p,
       reply_preview: repliesMap[p.id] || [],
     }));
@@ -138,15 +149,24 @@ router.post('/post', authenticate, async (req, res) => {
     });
 
     let scheduled = null;
+    let initialLikeCount = 0;
+    let initialReplyCount = 0;
+    const mode = await experienceMode(userId);
     if (!replyTo) {
-      // 通常投稿: いいね + リプライをスケジュール
+      // admired は個別住人を大量に作らず、観客全体の演出を別経路で準備する。
       try {
-        scheduled = await scheduleReactions(userId, postId, content.trim());
+        if (mode === 'celebrity') {
+          scheduled = await createCelebrityScene(userId, postId, content.trim(), createdAt);
+          initialLikeCount = scheduled.likeCount;
+          initialReplyCount = scheduled.commentCount;
+        } else {
+          scheduled = await scheduleReactions(userId, postId, content.trim());
+        }
       } catch (e) {
         // 投稿自体は保存済みなので、リアクション予約だけの失敗で投稿を500にしない。
         console.error('Schedule error:', e);
       }
-    } else {
+    } else if (mode !== 'celebrity') {
       // リプライ投稿: リプライへのAI反応もスケジュール（確率低め）
       scheduleReplyReactions(userId, postId, content.trim(), replyTo).catch(e => console.error('Reply schedule error:', e));
     }
@@ -159,7 +179,8 @@ router.post('/post', authenticate, async (req, res) => {
         content: content.trim(), reply_to: replyTo || null,
         author_name: user.rows[0]?.username || 'あなた',
         author_handle: user.rows[0]?.username || 'you',
-        like_count: 0, reply_count: 0, user_liked: 0,
+        experience_mode: mode,
+        like_count: initialLikeCount, reply_count: initialReplyCount, user_liked: 0,
         reply_preview: [],
         created_at: createdAt,
       },
@@ -227,7 +248,10 @@ router.get('/replies/:postId', authenticate, async (req, res) => {
             ORDER BY datetime(p.created_at) ASC, thread.depth ASC, p.id ASC`,
       args: [postId, userId, userId, userId],
     });
-    res.json({ replies: replies.rows });
+    const audience = await celebrityComments(userId, [postId], 8);
+    const combined = [...replies.rows, ...(audience.get(postId) || [])]
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    res.json({ replies: combined });
   } catch (e) { res.status(500).json({ error: 'リプライ取得に失敗しました' }); }
 });
 

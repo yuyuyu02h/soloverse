@@ -231,7 +231,8 @@ async function runCharacterGrowth(userId) {
 
   const chars = charsResult.rows;
   const settings = settingsResult.rows[0];
-  if (!settings || chars.length >= 20) return;
+  // 有名人モードでは大衆を個別キャラクターとして増殖させない。
+  if (!settings || settings.position === 'admired' || chars.length >= 20) return;
 
   // autonomous_log で6時間チェック（character_growth_log ではなく統一管理）
   const log = await db.execute({

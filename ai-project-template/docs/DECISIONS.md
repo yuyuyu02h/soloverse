@@ -237,6 +237,41 @@ The API and UI comments explicitly state that the account and user posts must re
 - `frontend/components/TrendPanel.tsx`, `rebuildWorld`
 - Root `README.md`
 
+## 2026-09-23 — Treat admired as a simulated celebrity-audience mode
+
+### Status
+
+Accepted and implemented.
+
+### Context
+
+The previous `admired` behavior reused the small resident system. It could schedule at most the available resident count as likes and prompted those residents with repetitive praise language. Materializing tens of thousands of likes or comments as individual AI accounts would be expensive, slow, and unnecessary for the intended private experience.
+
+### Decision
+
+Keep the onboarding UI and stored `position=admired` value unchanged, but route new root user posts through a separate celebrity audience engine:
+
+- store one aggregate audience scene per post
+- derive growing like/comment display counts locally without creating corresponding rows
+- use one LLM request to direct the overall mood and eight representative comments
+- create representative identities, avatars, timing, and comment-like counts locally
+- disable normal reaction scheduling, missed-reply backfill, and resident growth for admired worlds
+
+### Consequences
+
+- Large engagement numbers no longer require large resident or reaction tables.
+- Only representative comments are inspectable; the displayed total is an intentional simulation rather than a list of hidden individual comments.
+- Count growth continues through existing 30-second polling and needs no LLM call.
+- The audience director still inherits the quality and availability limits of the configured model fallback.
+- Existing non-admired worlds retain their previous behavior.
+
+### Source Evidence
+
+- `backend/src/services/celebrityMode.js`
+- `backend/src/db/celebritySchema.js`
+- `backend/src/routes/timeline.js`
+- `backend/test/celebrity-mode.test.js`
+
 ## Undocumented Decisions Requiring Owner Confirmation
 
 - [TODO: Intended production hosting and operational ownership.]

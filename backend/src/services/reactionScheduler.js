@@ -112,8 +112,9 @@ const MAX_ATTEMPTS = 3;
 async function backfillDirectReplies() {
   const candidates = await db.execute({
     sql: `SELECT p.id, p.user_id, p.content
-          FROM posts p
+          FROM posts p JOIN world_settings w ON w.user_id=p.user_id
           WHERE p.author_type = 'user' AND p.reply_to IS NULL
+            AND w.position != 'admired'
             AND datetime(p.created_at) <= datetime('now', '-2 minutes')
             AND datetime(p.created_at) >= datetime('now', '-24 hours')
             AND NOT EXISTS (
@@ -149,6 +150,11 @@ async function backfillDirectReplies() {
 }
 
 async function processReactionQueue() {
+  // 有名人モードは観客シーンが反応を担当する。切替前に残った通常キューも処理しない。
+  await db.execute(`UPDATE reaction_queue SET done=1
+                    WHERE done=0 AND user_id IN (
+                      SELECT user_id FROM world_settings WHERE position='admired'
+                    )`);
   await backfillDirectReplies();
   const pending = await db.execute({
     sql: `SELECT rq.*, ac.name, ac.username, ac.personality, ac.reply_style, ac.interests

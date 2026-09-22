@@ -17,7 +17,11 @@ export interface Post {
   reply_preview?: Post[];
   reply_to?: string | null;
   depth?: number;
+  synthetic?: boolean;
+  experience_mode?: 'community' | 'celebrity';
 }
+
+const formatCount = (value: number) => new Intl.NumberFormat('ja-JP').format(Number(value) || 0);
 
 export function PostCard({ post, onLike, onOpenReplies, highlight = false, compact = false }: {
   post: Post;
@@ -96,7 +100,7 @@ export function PostCard({ post, onLike, onOpenReplies, highlight = false, compa
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
-              <span>返信 {Number(post.reply_count) || 0}</span>
+              <span>返信 {formatCount(post.reply_count)}</span>
             </button>
             <button onClick={handleLike} disabled={liking} aria-label={liked ? 'いいねを取り消す' : 'いいね'} style={{
               background: 'none', border: 'none', cursor: 'pointer',
@@ -108,7 +112,7 @@ export function PostCard({ post, onLike, onOpenReplies, highlight = false, compa
                 fill={liked ? '#f91880' : 'none'} stroke="currentColor" strokeWidth="1.8">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
               </svg>
-              <span>いいね {likeCount}</span>
+              <span>いいね {formatCount(likeCount)}</span>
             </button>
           </div>
         </div>
@@ -146,7 +150,7 @@ export function PostCard({ post, onLike, onOpenReplies, highlight = false, compa
             cursor: 'pointer', fontWeight: 500,
           }}
         >
-          {Number(post.reply_count) - 2}件の返信をもっと見る
+          {formatCount(Number(post.reply_count) - 2)}件の返信をもっと見る
         </div>
       )}
     </div>
