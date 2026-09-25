@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, getToken, getUser, setUser } from '../../lib/api';
+import styles from './page.module.css';
 
-type Step = 1 | 2 | 3 | 4 | 'loading' | 'done';
+type Step = 1 | 2 | 3 | 4 | 'loading';
 
 const INTEREST_TAGS = [
   'アニメ', '漫画', 'ゲーム', '音楽', '映画', '読書', '料理', 'スポーツ',
@@ -19,6 +20,25 @@ const LOADING_MESSAGES = [
   'それぞれの個性を磨いています...',
   'タイムラインに命を吹き込んでいます...',
   'もうすぐ、あなただけの世界が始まります...',
+];
+
+const POSITION_OPTIONS = [
+  { value: 'empathy', label: '共感してほしい', desc: '気持ちをわかってくれる仲間に囲まれたい' },
+  { value: 'admired', label: '憧れられたい', desc: '有名人・インフルエンサーとして注目を集めたい' },
+  { value: 'observer', label: 'ただ見ていたい', desc: '自分のペースで、静かに世界に溶け込みたい' },
+];
+
+const ATMOSPHERE_OPTIONS = [
+  { value: 'calm', label: '穏やか・褒め合う', desc: '否定や議論のない、温かい空間' },
+  { value: 'active', label: '活発に議論する', desc: '刺激的な意見交換が飛び交う場所' },
+  { value: 'village', label: 'みんなが自分を少し知っている', desc: '村的な、ちょうどいい距離感のコミュニティ' },
+  { value: 'vent', label: '過激・吐き出し場', desc: '感情をそのままぶつけられる場所' },
+];
+
+const EXCLUSION_OPTIONS = [
+  { value: 'no_criticism', label: '批判・否定コメント' },
+  { value: 'no_politics', label: '政治・炎上系の話題' },
+  { value: 'no_comparison', label: '比較・マウンティング' },
 ];
 
 export default function OnboardingPage() {
@@ -42,7 +62,7 @@ export default function OnboardingPage() {
       setUser(user);
       if (user.onboardingDone) router.replace('/timeline');
     }).catch(() => {});
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (step === 'loading') {
@@ -53,16 +73,16 @@ export default function OnboardingPage() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [step]);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [step]);
+
   const toggleTag = (tag: string) => {
-    setSelectedTags(prev =>
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
   const toggleExclusion = (val: string) => {
-    setExclusions(prev =>
-      prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]
-    );
+    setExclusions(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
   };
 
   const allInterests = [
@@ -71,7 +91,7 @@ export default function OnboardingPage() {
   ].join(', ');
 
   const submit = async () => {
-    if (submittedRef.current) return; // 二重送信防止
+    if (submittedRef.current) return;
     submittedRef.current = true;
     setStep('loading');
     setError('');
@@ -86,240 +106,140 @@ export default function OnboardingPage() {
       if (currentUser) setUser({ ...currentUser, onboardingDone: true });
       setTimeout(() => router.replace('/timeline'), 500);
     } catch (e: unknown) {
-      submittedRef.current = false; // 失敗したらリセットして再試行可能に
+      submittedRef.current = false;
       const msg = e instanceof Error ? e.message : '世界の生成に失敗しました';
       setError(msg);
       setStep(4);
     }
   };
 
-  // ─── ローディング画面 ───
-  if (step === 'loading') {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '1.5rem', animation: 'pulse 2s infinite' }}>🌐</div>
-        <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '1rem' }}>
-          あなたの世界を構築しています
-        </h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', minHeight: '1.4em', transition: 'opacity 0.3s' }}>
-          {LOADING_MESSAGES[loadingMsg]}
-        </p>
-        <div style={{ marginTop: '2rem', display: 'flex', gap: '6px' }}>
-          {[0,1,2].map(i => (
-            <div key={i} style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', opacity: loadingMsg % 3 === i ? 1 : 0.3, transition: 'opacity 0.3s' }} />
-          ))}
-        </div>
-        <style>{`@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }`}</style>
-      </div>
-    );
-  }
+  const activeStep = step === 'loading' ? 4 : step;
+  const nextDisabled = step === 1 ? !position
+    : step === 2 ? selectedTags.length === 0 && !customInterest.trim()
+    : step === 3 ? !atmosphere
+    : submittedRef.current;
 
-  const progress = (typeof step === 'number' ? step - 1 : 4) / 4;
+  const advance = () => {
+    if (step === 1) setStep(2);
+    else if (step === 2) setStep(3);
+    else if (step === 3) setStep(4);
+    else if (step === 4) void submit();
+  };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-      {/* プログレスバー */}
-      <div style={{ width: '100%', maxWidth: '480px', marginBottom: '2rem' }}>
-        <div style={{ height: '3px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${progress * 100}%`, background: 'var(--accent)', transition: 'width 0.4s ease', borderRadius: '2px' }} />
-        </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'right' }}>
-          {typeof step === 'number' ? `${step} / 4` : ''}
-        </p>
-      </div>
+    <div className={styles.page}>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Syne:wght@700;800&family=Space+Grotesk:wght@400;500&display=swap" rel="stylesheet" />
+      <div className={styles.ambient} aria-hidden="true" />
 
-      <div style={{ width: '100%', maxWidth: '480px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '14px', padding: '2rem' }}>
+      <header className={styles.header}>
+        <div className={styles.brand}>Soloverse <i /></div>
+        <div className={styles.headerMeta}><span>CREATE YOUR WORLD</span><b>SETUP</b></div>
+      </header>
 
-        {/* STEP 1 */}
-        {step === 1 && (
-          <StepWrapper title="この世界で、あなたはどんな存在になりたいですか？">
-            {[
-              { value: 'empathy', label: '共感してほしい', desc: '気持ちをわかってくれる仲間に囲まれたい' },
-              { value: 'admired', label: '憧れられたい', desc: '有名人・インフルエンサーとして注目を集めたい' },
-              { value: 'observer', label: 'ただ見ていたい', desc: '自分のペースで、静かに世界に溶け込みたい' },
-            ].map(opt => (
-              <ChoiceCard key={opt.value} selected={position === opt.value} onClick={() => setPosition(opt.value)} label={opt.label} desc={opt.desc} />
+      <main className={styles.main}>
+        <section className={styles.formArea} aria-label="オンボーディング">
+          <div className={styles.progressHead}>
+            <span>WORLD CONFIGURATION</span>
+            <span className={styles.count}>{String(activeStep).padStart(2, '0')} / 04</span>
+          </div>
+          <div className={styles.progressTrack} role="progressbar" aria-label="オンボーディングの進行状況" aria-valuemin={0} aria-valuemax={4} aria-valuenow={step === 'loading' ? 4 : step - 1}>
+            {[0, 1, 2, 3].map(index => (
+              <span key={index} className={index < activeStep - 1 ? styles.progressDone : index === activeStep - 1 ? styles.progressActive : ''} />
             ))}
-            <NextButton disabled={!position} onClick={() => setStep(2)} />
-          </StepWrapper>
-        )}
+          </div>
 
-        {/* STEP 2 */}
-        {step === 2 && (
-          <StepWrapper title="好きなことを教えてください" sub="ニッチなほど、ここではわかってくれる人が多くいます">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '1rem' }}>
-              {INTEREST_TAGS.map(tag => (
-                <button
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: '20px',
-                    border: `1px solid ${selectedTags.includes(tag) ? 'var(--accent)' : 'var(--border)'}`,
-                    background: selectedTags.includes(tag) ? 'var(--accent)' : 'var(--surface2)',
-                    color: 'var(--text)',
-                    fontSize: '0.85rem',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-            <input
-              aria-label="その他の興味・関心"
-              placeholder="その他（自由記述）"
-              value={customInterest}
-              onChange={e => setCustomInterest(e.target.value)}
-              maxLength={100}
-              style={{ width: '100%', padding: '0.6rem 0.85rem', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text)', fontSize: '0.9rem', outline: 'none' }}
-            />
-            <div style={{ display: 'flex', gap: '8px', marginTop: '1.25rem' }}>
-              <BackButton onClick={() => setStep(1)} />
-              <NextButton disabled={selectedTags.length === 0 && !customInterest.trim()} onClick={() => setStep(3)} flex />
-            </div>
-          </StepWrapper>
-        )}
-
-        {/* STEP 3 */}
-        {step === 3 && (
-          <StepWrapper title="あなたの理想のタイムラインは？">
-            {[
-              { value: 'calm', label: '穏やか・褒め合う', desc: '否定や議論のない、温かい空間' },
-              { value: 'active', label: '活発に議論する', desc: '刺激的な意見交換が飛び交う場所' },
-              { value: 'village', label: 'みんなが自分を少し知っている', desc: '村的な、ちょうどいい距離感のコミュニティ' },
-              { value: 'vent', label: '過激・吐き出し場', desc: '感情をそのままぶつけられる場所' },
-            ].map(opt => (
-              <ChoiceCard key={opt.value} selected={atmosphere === opt.value} onClick={() => setAtmosphere(opt.value)} label={opt.label} desc={opt.desc} />
-            ))}
-            <div style={{ display: 'flex', gap: '8px', marginTop: '0.5rem' }}>
-              <BackButton onClick={() => setStep(2)} />
-              <NextButton disabled={!atmosphere} onClick={() => setStep(4)} flex />
-            </div>
-          </StepWrapper>
-        )}
-
-        {/* STEP 4 */}
-        {step === 4 && (
-          <StepWrapper title="この世界から消したいものを選んでください" sub="複数選択可・選ばなくてもOK">
-            {[
-              { value: 'no_criticism', label: '批判・否定コメント' },
-              { value: 'no_politics', label: '政治・炎上系の話題' },
-              { value: 'no_comparison', label: '比較・マウンティング' },
-            ].map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => toggleExclusion(opt.value)}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '0.75rem 1rem',
-                  marginBottom: '0.5rem',
-                  background: exclusions.includes(opt.value) ? 'rgba(124,106,247,0.15)' : 'var(--surface2)',
-                  border: `1px solid ${exclusions.includes(opt.value) ? 'var(--accent)' : 'var(--border)'}`,
-                  borderRadius: '8px',
-                  color: 'var(--text)',
-                  fontSize: '0.95rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  transition: 'all 0.15s',
-                }}
-              >
-                <span style={{ width: '18px', height: '18px', borderRadius: '4px', border: `2px solid ${exclusions.includes(opt.value) ? 'var(--accent)' : 'var(--border)'}`, background: exclusions.includes(opt.value) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', flexShrink: 0 }}>
-                  {exclusions.includes(opt.value) ? '✓' : ''}
-                </span>
-                {opt.label}
-              </button>
-            ))}
-            {error && (
-              <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 12px', marginBottom: '0.5rem' }}>
-                <p style={{ color: 'var(--danger)', fontSize: '0.85rem', margin: 0 }}>
-                  ⚠️ {error}
-                </p>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '4px 0 0' }}>
-                  もう一度「世界を生成する」を押してください
-                </p>
+          <div className={styles.panel} aria-busy={step === 'loading'}>
+            {step === 'loading' ? (
+              <div className={styles.loadingPanel} role="status" aria-live="polite">
+                <div className={styles.loadingOrb} aria-hidden="true" />
+                <h2>あなたの世界を構築しています</h2>
+                <p>{LOADING_MESSAGES[loadingMsg]}</p>
               </div>
+            ) : (
+              <>
+                {step === 1 && (
+                  <StepContent kicker="01 — YOUR PRESENCE" title="この世界で、あなたはどんな存在になりたいですか？">
+                    <div className={styles.choices}>
+                      {POSITION_OPTIONS.map(opt => (
+                        <ChoiceCard key={opt.value} selected={position === opt.value} onClick={() => setPosition(opt.value)} label={opt.label} desc={opt.desc} />
+                      ))}
+                    </div>
+                  </StepContent>
+                )}
+
+                {step === 2 && (
+                  <StepContent kicker="02 — YOUR INTERESTS" title="好きなことを教えてください" sub="ニッチなほど、ここではわかってくれる人が多くいます">
+                    <div className={styles.tagGrid} aria-label="興味・関心">
+                      {INTEREST_TAGS.map(tag => (
+                        <button key={tag} type="button" className={styles.tag} aria-pressed={selectedTags.includes(tag)} onClick={() => toggleTag(tag)}>{tag}</button>
+                      ))}
+                    </div>
+                    <label className={styles.customLabel} htmlFor="custom-interest">その他の興味・関心</label>
+                    <input id="custom-interest" className={styles.customInput} placeholder="その他（自由記述）" value={customInterest} onChange={event => setCustomInterest(event.target.value)} maxLength={100} />
+                  </StepContent>
+                )}
+
+                {step === 3 && (
+                  <StepContent kicker="03 — YOUR ATMOSPHERE" title="あなたの理想のタイムラインは？">
+                    <div className={styles.choices}>
+                      {ATMOSPHERE_OPTIONS.map(opt => (
+                        <ChoiceCard key={opt.value} selected={atmosphere === opt.value} onClick={() => setAtmosphere(opt.value)} label={opt.label} desc={opt.desc} />
+                      ))}
+                    </div>
+                  </StepContent>
+                )}
+
+                {step === 4 && (
+                  <StepContent kicker="04 — YOUR BOUNDARIES" title="この世界から消したいものを選んでください" sub="複数選択可・選ばなくてもOK">
+                    <div className={styles.choices}>
+                      {EXCLUSION_OPTIONS.map(opt => (
+                        <ChoiceCard key={opt.value} selected={exclusions.includes(opt.value)} onClick={() => toggleExclusion(opt.value)} label={opt.label} multi />
+                      ))}
+                    </div>
+                    {error && (
+                      <div className={styles.error} role="alert">
+                        <p>{error}</p>
+                        <small>もう一度「世界を生成する」を押してください</small>
+                      </div>
+                    )}
+                  </StepContent>
+                )}
+
+                <div className={styles.actions}>
+                  {step > 1 && <button type="button" className={styles.back} onClick={() => setStep((step - 1) as Step)}>← 戻る</button>}
+                  <button type="button" className={styles.next} disabled={nextDisabled} onClick={advance}>
+                    {step === 4 ? '世界を生成する' : '次へ'} <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              </>
             )}
-            <div style={{ display: 'flex', gap: '8px', marginTop: '0.75rem' }}>
-              <BackButton onClick={() => setStep(3)} />
-              <button
-                onClick={submit}
-                disabled={submittedRef.current}
-                style={{ flex: 1, padding: '0.75rem', background: 'var(--accent)', border: 'none', borderRadius: '8px', color: 'var(--text)', fontSize: '0.95rem', fontWeight: 600 }}
-              >
-                世界を生成する ✦
-              </button>
-            </div>
-          </StepWrapper>
-        )}
-      </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className={styles.footer}><span>SOLOVERSE PROTOCOL</span><span>© 2026</span></footer>
     </div>
   );
 }
 
-function StepWrapper({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+function StepContent({ kicker, title, sub, children }: { kicker: string; title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div>
-      <h2 style={{ fontSize: '1.15rem', fontWeight: 700, lineHeight: 1.4, marginBottom: sub ? '0.4rem' : '1.25rem' }}>{title}</h2>
-      {sub && <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>{sub}</p>}
+    <>
+      <span className={styles.panelKicker}>{kicker}</span>
+      <h1 className={styles.title}>{title}</h1>
+      {sub && <p className={styles.sub}>{sub}</p>}
       {children}
-    </div>
+    </>
   );
 }
 
-function ChoiceCard({ selected, onClick, label, desc }: { selected: boolean; onClick: () => void; label: string; desc: string }) {
+function ChoiceCard({ selected, onClick, label, desc, multi = false }: { selected: boolean; onClick: () => void; label: string; desc?: string; multi?: boolean }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        width: '100%',
-        textAlign: 'left',
-        padding: '0.85rem 1rem',
-        marginBottom: '0.6rem',
-        background: selected ? 'rgba(124,106,247,0.15)' : 'var(--surface2)',
-        border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
-        borderRadius: '10px',
-        color: 'var(--text)',
-        transition: 'all 0.15s',
-      }}
-    >
-      <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{label}</div>
-      <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '2px' }}>{desc}</div>
-    </button>
-  );
-}
-
-function NextButton({ onClick, disabled, flex }: { onClick: () => void; disabled: boolean; flex?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        ...(flex ? { flex: 1 } : { width: '100%', marginTop: '1.25rem' }),
-        padding: '0.75rem',
-        background: disabled ? 'var(--surface2)' : 'var(--accent)',
-        border: 'none',
-        borderRadius: '8px',
-        color: disabled ? 'var(--text-muted)' : 'var(--text)',
-        fontSize: '0.95rem',
-        fontWeight: 600,
-        transition: 'background 0.15s',
-      }}
-    >
-      次へ →
-    </button>
-  );
-}
-
-function BackButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{ padding: '0.75rem 1rem', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--text-muted)', fontSize: '0.9rem' }}
-    >
-      ← 戻る
+    <button type="button" className={styles.choice} aria-pressed={selected} onClick={onClick}>
+      <span><strong>{label}</strong>{desc && <small>{desc}</small>}</span>
+      <span className={multi ? styles.multiMark : styles.choiceMark} aria-hidden="true">{selected ? '✓' : ''}</span>
     </button>
   );
 }
