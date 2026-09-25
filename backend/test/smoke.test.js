@@ -186,6 +186,39 @@ test('主要ユーザーフローとテナント境界が動作する', async ()
     assert.ok(ownMetrics.data.profiles.length > 0);
     assert.equal((await db.execute({ sql: 'SELECT COUNT(*) AS n FROM content_candidates WHERE character_id=?', args: [character.rows[0].id] })).rows[0].n, 0);
   }
+
+  const celebrity = await api('/api/auth/register', {
+    method: 'POST',
+    body: { email: 'celebrity@example.com', password: 'password123', username: '有名人体験' },
+  });
+  assert.equal((await api('/api/onboarding/submit', {
+    method: 'POST', token: celebrity.data.token,
+    body: { position: 'admired', interests: '映画', atmosphere: 'calm', exclusions: ['no_criticism'] },
+  })).status, 200);
+  const celebrityPost = await api('/api/timeline/post', {
+    method: 'POST', token: celebrity.data.token, body: { content: '新しい映画について話します' },
+  });
+  assert.equal(celebrityPost.status, 200);
+  assert.equal(celebrityPost.data.scheduled.mode, 'celebrity');
+  assert.equal(Number(celebrityPost.data.post.like_count), 0);
+  assert.equal(Number(celebrityPost.data.post.reply_count), 0);
+  assert.equal((await db.execute({ sql: 'SELECT COUNT(*) AS n FROM celebrity_scenes WHERE post_id=?', args: [celebrityPost.data.post.id] })).rows[0].n, 1);
+  assert.equal((await db.execute({ sql: 'SELECT COUNT(*) AS n FROM reaction_queue WHERE post_id=?', args: [celebrityPost.data.post.id] })).rows[0].n, 0);
+  const celebrityTimeline = await api('/api/timeline?page=0', { token: celebrity.data.token });
+  const celebrityRoot = celebrityTimeline.data.posts.find(post => post.id === celebrityPost.data.post.id);
+  assert.equal(celebrityRoot.experience_mode, 'celebrity');
+  assert.ok(Number(celebrityRoot.like_count) >= Number(celebrityPost.data.post.like_count));
+  await db.execute({ sql: 'UPDATE celebrity_scenes SET started_at=? WHERE post_id=?', args: [new Date(Date.now() - 2 * 60 * 60000).toISOString(), celebrityPost.data.post.id] });
+  await require('../src/services/celebrityMode').processPendingCelebrityScenes();
+  const celebrityReplies = await api('/api/timeline/replies/' + celebrityPost.data.post.id, { token: celebrity.data.token });
+  assert.equal(celebrityReplies.status, 200);
+  assert.equal(celebrityReplies.data.replies.filter(reply => reply.synthetic).length, 150);
+  const celebrityNotifications = await api('/api/timeline/notifications', { token: celebrity.data.token });
+  assert.equal(celebrityNotifications.data.celebrityMode, true);
+  assert.ok(celebrityNotifications.data.notifications.some(notification => notification.type === 'celebrity_reply'));
+  assert.equal((await api('/api/timeline/notifications/celebrity-settings', { method: 'POST', token: celebrity.data.token, body: { enabled: false } })).data.enabled, false);
+  const mutedNotifications = await api('/api/timeline/notifications', { token: celebrity.data.token });
+  assert.equal(mutedNotifications.data.notifications.some(notification => notification.type === 'celebrity_reply'), false);
 });
 
 test('LLM JSONのコードフェンスと途中切れを復旧できる', () => {

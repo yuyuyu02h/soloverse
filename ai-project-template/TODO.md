@@ -109,6 +109,7 @@ Verified in source and `docs/improvement-2026-09-15.md`:
 - [x] Added a comprehensive staged implementation plan in `ROADMAP.md`.
 - [x] Set the current direction to personal creative quality, not a full public launch.
 - [x] Documented current provider free-tier behavior and a quota-efficient expansion plan in `docs/LLM_FREE_TIER.md`.
+- [x] Split `admired` into an internal celebrity mode without changing onboarding: simulated aggregate engagement, one AI audience-director call, and eight representative comments without mass account/like creation.
 
 ## Notes
 

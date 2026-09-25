@@ -155,6 +155,7 @@ async function initDB() {
   await migrateReactionQueueAttempts();
   await createIndexes();
   await require('./contentSchema').initContentSchema(db);
+  await require('./celebritySchema').initCelebritySchema(db);
 
   console.log('DB initialized');
 }

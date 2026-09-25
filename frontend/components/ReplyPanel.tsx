@@ -5,6 +5,8 @@ import { api } from '../lib/api';
 import { Avatar, timeAgo, renderContent } from './utils';
 import type { Post } from './PostCard';
 
+const formatCount = (value: number) => new Intl.NumberFormat('ja-JP').format(Number(value) || 0);
+
 export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
   post: Post;
   onClose: () => void;
@@ -40,7 +42,7 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
       .finally(() => { refreshing = false; if (!cancelled) setLoading(false); });
     };
     void refresh();
-    const interval = setInterval(refresh, 30000);
+    const interval = setInterval(refresh, post.experience_mode === 'celebrity' ? 5000 : 30000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [post.id]);
 
@@ -137,8 +139,8 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
                   </small>}
                   {renderContent(r.content)}
                 </p>
-                <button onClick={() => handleLikeReply(r.id)} style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
+                <button onClick={() => !r.synthetic && handleLikeReply(r.id)} disabled={r.synthetic} style={{
+                  background: 'none', border: 'none', cursor: r.synthetic ? 'default' : 'pointer',
                   color: likedPosts.has(r.id) ? '#f91880' : '#71767b',
                   display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, padding: 0,
                 }}>
@@ -146,9 +148,9 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
                     fill={likedPosts.has(r.id) ? '#f91880' : 'none'} stroke="currentColor" strokeWidth="1.8">
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                   </svg>
-                  {(likeCounts[r.id] || 0) > 0 && <span>{likeCounts[r.id]}</span>}
+                  {(likeCounts[r.id] || 0) > 0 && <span>{formatCount(likeCounts[r.id])}</span>}
                 </button>
-                <button onClick={() => setReplyTo(r)} style={{ marginTop: 8, background: 'none', border: 0, color: '#1d9bf0', cursor: 'pointer' }}>この投稿に返信</button>
+                {!r.synthetic && <button onClick={() => setReplyTo(r)} style={{ marginTop: 8, background: 'none', border: 0, color: '#1d9bf0', cursor: 'pointer' }}>この投稿に返信</button>}
               </div>
             </div>
           ))}
