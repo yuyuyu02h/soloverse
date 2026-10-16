@@ -134,6 +134,7 @@ router.post('/logout', authMiddleware, async (req, res) => {
     else await revokeSession(req.userId, req.sessionId);
     res.json({ success: true, worldReset: reset });
   } catch (error) {
+    if (error.code === 'WORLD_BUSY') return res.status(409).json({ error: error.message, code: error.code });
     console.error('Logout error:', error.message);
     res.status(500).json({ error: 'ログアウト処理に失敗しました' });
   }

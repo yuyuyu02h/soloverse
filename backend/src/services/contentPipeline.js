@@ -31,7 +31,7 @@ async function deferPool(userId, settings, error, fallback = 'provider_unavailab
 }
 
 // Caller holds the existing per-world lock. Each refilling pass is strictly bounded.
-async function fillPool(userId, { seed = false } = {}) {
+async function fillPool(userId, { seed = false, deferReview = process.env.SOLOVERSE_RUNTIME === 'cloudflare' } = {}) {
   if (!enabled()) return 0;
   if (!await isGenerationActive(userId)) return 0;
   const cfg = config();
@@ -126,7 +126,7 @@ ${JSON.stringify(w.recent.filter(p => !p.reply_to).slice(0, 6))}
   }
   let reviewed = false;
   let reviewDeferred = false;
-  if (accepted.length && cfg.review) {
+  if (accepted.length && cfg.review && !deferReview) {
     try {
       const verdicts = await reviewBatch(userId, w.settings, accepted.map(c => ({ content:c.content,parent:accepted.find(p=>p.id===c.parent_id)?.content || w.recent.find(p=>p.id===c.parent_id)?.content })), { priority:seed ? 'interactive' : 'background' });
       const kept = new Set();
@@ -260,7 +260,14 @@ async function seedEnhanced(userId) {
   await themeState(userId);
   const exists = await db.execute({ sql: `SELECT 1 FROM posts p WHERE user_id=? AND ${currentVersion('p')} AND author_type='ai' LIMIT 1`, args: [userId] });
   if (exists.rows.length) return 0;
-  await fillPool(userId, { seed: true });
+  if (process.env.SOLOVERSE_RUNTIME === 'cloudflare' && config().review) {
+    const pending = (await db.execute({ sql: `SELECT 1 FROM content_candidates c WHERE user_id=? AND ${currentVersion('c')} AND state='pending' LIMIT 1`, args: [userId] })).rows.length;
+    if (!pending) {
+      const prepared = await fillPool(userId, { seed: true, deferReview: true });
+      // Keep generation and review/publication in separate Worker invocations.
+      if (prepared) throw new runtime.DeferredError('initial_posts_review', Date.now() + 1500);
+    }
+  } else await fillPool(userId, { seed: true });
   const count = await publishPool(userId);
   if (!count) {
     const state = (await db.execute({ sql: 'SELECT next_fill_at,defer_reason FROM content_pool_state WHERE user_id=?', args: [userId] })).rows[0];

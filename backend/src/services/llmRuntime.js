@@ -14,7 +14,8 @@ class DeferredError extends Error {
   }
 }
 function schedule(options, task) {
-  if (!enabled()) return task();
+  // Worker invocations have separate lifetimes. The D1 world lease serializes work there.
+  if (!enabled() || process.env.SOLOVERSE_RUNTIME === 'cloudflare') return task();
   return new Promise((resolve, reject) => {
     waiting.push({ task, resolve, reject, priority: options.priority === 'background' ? 1 : 0 });
     drain();

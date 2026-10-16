@@ -14,8 +14,13 @@ async function withLease(userId, task) {
   const owner = require('node:crypto').randomUUID();
   const name = `world:${userId}`;
   const now = Date.now();
-  const lease = (await db.execute({ sql: `INSERT INTO deployment_locks(name,owner,expires_at) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,expires_at=excluded.expires_at WHERE expires_at<? RETURNING owner`, args: [name,owner,now+14*60000,now] })).rows[0];
-  if (lease?.owner !== owner) throw new Error('世界を更新しています。少し待って再試行してください');
+  const lease = (await db.execute({ sql: `INSERT INTO deployment_locks(name,owner,expires_at) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET owner=excluded.owner,expires_at=excluded.expires_at WHERE expires_at<? RETURNING owner`, args: [name,owner,now+3*60000,now] })).rows[0];
+  if (lease?.owner !== owner) {
+    const error = new Error('世界を更新中です。少し待って再試行してください。入力内容はそのまま残っています。');
+    error.code = 'WORLD_BUSY';
+    error.retryAt = new Date(Date.now() + 5000).toISOString();
+    throw error;
+  }
   try { return await task(); }
   finally { const cleanup = db.execute({ sql: 'DELETE FROM deployment_locks WHERE name=? AND owner=?', args: [name,owner] }); db.keepAlive(cleanup); await cleanup; }
 }

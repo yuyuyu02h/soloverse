@@ -22,7 +22,7 @@ export default function TimelinePage() {
   const [postError, setPostError] = useState('');
   const [postNotice, setPostNotice] = useState('');
   const [timelineError, setTimelineError] = useState('');
-  const [seedWait, setSeedWait] = useState<{ retryAt?: string } | null>(null);
+  const [seedWait, setSeedWait] = useState<{ retryAt?: string; reason?: string } | null>(null);
   const [retryReady, setRetryReady] = useState(true);
 
   const [loading, setLoading] = useState(true);
@@ -84,7 +84,11 @@ export default function TimelinePage() {
     const delay = seedWait?.retryAt ? Date.parse(seedWait.retryAt) - Date.now() : 0;
     setRetryReady(!(delay > 0));
     if (!(delay > 0)) return;
-    const timer = setTimeout(() => setRetryReady(true), Math.min(delay, 2147483647));
+    const epoch = epochRef.current;
+    const timer = setTimeout(() => {
+      setRetryReady(true);
+      if (seedWait?.reason === 'initial_posts_review' && document.visibilityState === 'visible' && mountedRef.current && epoch === epochRef.current) void initTimeline();
+    }, Math.min(delay, 2147483647));
     return () => clearTimeout(timer);
   }, [seedWait]);
 
@@ -103,7 +107,7 @@ export default function TimelinePage() {
         const seed = await api.post('/api/timeline/seed', {});
         if (seed.status === 'waiting') {
           seedError = seed.message;
-          setSeedWait({ retryAt: seed.retryAt });
+          setSeedWait({ retryAt: seed.retryAt, reason: seed.reason });
         }
       }
       catch (e) { seedError = e instanceof Error ? e.message : 'AIの投稿を準備できませんでした'; }

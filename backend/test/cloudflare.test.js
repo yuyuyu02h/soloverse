@@ -34,3 +34,17 @@ test('Cloudflare native password format accepts only the correct password and fi
     assert.equal(await verifyPassword('Fictional-Test-Password!','$2a$12$old-bcrypt-hash'),false);
   } finally { delete process.env.SOLOVERSE_RUNTIME; }
 });
+
+test('Cloudflare LLM tasks retain their own request context instead of draining another request queue', async () => {
+  const { schedule } = require('../src/services/llmRuntime');
+  const binding = id => ({ prepare() { return { bind() { return { async all() { return { results: [{ id }] }; } }; } }; } });
+  process.env.SOLOVERSE_RUNTIME = 'cloudflare';
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  try {
+    const first = withDatabase(binding('first'), () => schedule({}, async () => { await gate; return (await db.execute('SELECT id')).rows[0].id; }));
+    const second = withDatabase(binding('second'), () => schedule({}, async () => (await db.execute('SELECT id')).rows[0].id));
+    release();
+    assert.deepEqual(await Promise.all([first, second]), ['first', 'second']);
+  } finally { delete process.env.SOLOVERSE_RUNTIME; }
+});

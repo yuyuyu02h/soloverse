@@ -81,7 +81,7 @@ function getRequestInterval(target) {
 function pacedFetch(target, url, opts, beforeSend) {
   const state = pacers.get(target.providerName) || { chain: Promise.resolve(), lastRequestAt: 0 };
   const signal = opts.signal;
-  const run = state.chain.then(async () => {
+  const execute = async () => {
     signal.throwIfAborted();
     const waitMs = Math.max(0, getRequestInterval(target) - (Date.now() - state.lastRequestAt));
     if (waitMs > 0) await require('node:timers/promises').setTimeout(waitMs, undefined, { signal });
@@ -92,8 +92,11 @@ function pacedFetch(target, url, opts, beforeSend) {
     signal.throwIfAborted();
     state.lastRequestAt = Date.now();
     return fetch(url, opts);
-  });
-  state.chain = run.then(() => undefined, () => undefined);
+  };
+  // Do not retain another Worker request's I/O promises after that request ends.
+  const cloudflare = process.env.SOLOVERSE_RUNTIME === 'cloudflare';
+  const run = cloudflare ? execute() : state.chain.then(execute);
+  if (!cloudflare) state.chain = run.then(() => undefined, () => undefined);
   pacers.set(target.providerName, state);
   // 先行リクエストの完了待ちもタイムアウトに含める。期限切れのキュー項目は送信しない。
   return new Promise((resolve, reject) => {
