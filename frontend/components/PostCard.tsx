@@ -18,7 +18,11 @@ export interface Post {
   reply_to?: string | null;
   depth?: number;
   synthetic?: boolean;
-  experience_mode?: 'community' | 'celebrity';
+  experience_mode?: 'hobby' | 'community' | 'celebrity';
+  archived?: boolean;
+  theme_version?: number;
+  celebrity_status?: 'pending' | 'ready' | 'fallback';
+  audience_reaction_count?: number;
 }
 
 const formatCount = (value: number) => new Intl.NumberFormat('ja-JP').format(Number(value) || 0);
@@ -92,6 +96,9 @@ export function PostCard({ post, onLike, onOpenReplies, highlight = false, compa
           <p style={{ margin: '0 0 10px', color: '#e7e9ea', fontSize: compact ? 14 : 15, lineHeight: 1.6, wordBreak: 'break-word' }}>
             {renderContent(post.content)}
           </p>
+          {post.archived && <p style={{ color: '#9b8cda', fontSize: 12 }}>以前のテーマの投稿</p>}
+          {post.celebrity_status === 'pending' && <p role="status" style={{ color: '#a6aeb7', fontSize: 12 }}>AIの返信を準備しています</p>}
+          {post.experience_mode === 'celebrity' && <p style={{ color: '#71767b', fontSize: 11 }}>観客の反応を演出しています。返信数は読めるコメントの件数です。</p>}
           <div style={{ display: 'flex', gap: 20 }}>
             <button onClick={(e) => { e.stopPropagation(); onOpenReplies(post); }} style={{
               background: 'none', border: 'none', cursor: 'pointer', color: '#71767b',

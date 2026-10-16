@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, getToken, getUser, setUser } from '../../lib/api';
 import styles from './page.module.css';
+import { MODE_OPTIONS, CONTEXT_FIELDS, ROLE_OPTIONS, COMMUNITY_OPTIONS, atmosphereOptions, type ExperienceMode } from '../../lib/worldModes';
 
 type Step = 1 | 2 | 3 | 4 | 'loading';
 
@@ -22,19 +23,6 @@ const LOADING_MESSAGES = [
   'もうすぐ、あなただけの世界が始まります...',
 ];
 
-const POSITION_OPTIONS = [
-  { value: 'empathy', label: '共感してほしい', desc: '気持ちをわかってくれる仲間に囲まれたい' },
-  { value: 'admired', label: '憧れられたい', desc: '有名人・インフルエンサーとして注目を集めたい' },
-  { value: 'observer', label: 'ただ見ていたい', desc: '自分のペースで、静かに世界に溶け込みたい' },
-];
-
-const ATMOSPHERE_OPTIONS = [
-  { value: 'calm', label: '穏やか・褒め合う', desc: '否定や議論のない、温かい空間' },
-  { value: 'active', label: '活発に議論する', desc: '刺激的な意見交換が飛び交う場所' },
-  { value: 'village', label: 'みんなが自分を少し知っている', desc: '村的な、ちょうどいい距離感のコミュニティ' },
-  { value: 'vent', label: '過激・吐き出し場', desc: '感情をそのままぶつけられる場所' },
-];
-
 const EXCLUSION_OPTIONS = [
   { value: 'no_criticism', label: '批判・否定コメント' },
   { value: 'no_politics', label: '政治・炎上系の話題' },
@@ -44,7 +32,9 @@ const EXCLUSION_OPTIONS = [
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
-  const [position, setPosition] = useState('');
+  const [mode, setMode] = useState<ExperienceMode | ''>('');
+  const [celebrityRole, setCelebrityRole] = useState('');
+  const [community, setCommunity] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [customInterest, setCustomInterest] = useState('');
   const [atmosphere, setAtmosphere] = useState('');
@@ -89,6 +79,7 @@ export default function OnboardingPage() {
     ...selectedTags,
     ...(customInterest.trim() ? [customInterest.trim()] : []),
   ].join(', ');
+  const context = mode === 'celebrity' ? celebrityRole.trim() : mode === 'community' ? community.trim() : allInterests;
 
   const submit = async () => {
     if (submittedRef.current) return;
@@ -97,8 +88,8 @@ export default function OnboardingPage() {
     setError('');
     try {
       await api.post('/api/onboarding/submit', {
-        position,
-        interests: allInterests,
+        mode,
+        [CONTEXT_FIELDS[mode as ExperienceMode]]: context,
         atmosphere,
         exclusions,
       });
@@ -114,8 +105,8 @@ export default function OnboardingPage() {
   };
 
   const activeStep = step === 'loading' ? 4 : step;
-  const nextDisabled = step === 1 ? !position
-    : step === 2 ? selectedTags.length === 0 && !customInterest.trim()
+  const nextDisabled = step === 1 ? !mode
+    : step === 2 ? !context
     : step === 3 ? !atmosphere
     : submittedRef.current;
 
@@ -160,16 +151,16 @@ export default function OnboardingPage() {
             ) : (
               <>
                 {step === 1 && (
-                  <StepContent kicker="01 — YOUR PRESENCE" title="この世界で、あなたはどんな存在になりたいですか？">
+                  <StepContent kicker="01 — YOUR EXPERIENCE" title="どんなSNSを体験したいですか？">
                     <div className={styles.choices}>
-                      {POSITION_OPTIONS.map(opt => (
-                        <ChoiceCard key={opt.value} selected={position === opt.value} onClick={() => setPosition(opt.value)} label={opt.label} desc={opt.desc} />
+                      {MODE_OPTIONS.map(opt => (
+                        <ChoiceCard key={opt.value} selected={mode === opt.value} onClick={() => { setMode(opt.value); setAtmosphere(''); setExclusions([]); }} label={opt.label} desc={opt.desc} />
                       ))}
                     </div>
                   </StepContent>
                 )}
 
-                {step === 2 && (
+                {step === 2 && mode === 'hobby' && (
                   <StepContent kicker="02 — YOUR INTERESTS" title="好きなことを教えてください" sub="ニッチなほど、ここではわかってくれる人が多くいます">
                     <div className={styles.tagGrid} aria-label="興味・関心">
                       {INTEREST_TAGS.map(tag => (
@@ -177,14 +168,34 @@ export default function OnboardingPage() {
                       ))}
                     </div>
                     <label className={styles.customLabel} htmlFor="custom-interest">その他の興味・関心</label>
-                    <input id="custom-interest" className={styles.customInput} placeholder="その他（自由記述）" value={customInterest} onChange={event => setCustomInterest(event.target.value)} maxLength={100} />
+                    <input id="custom-interest" className={styles.customInput} placeholder="例：自作キーボード、古地図、Rustの開発" value={customInterest} onChange={event => setCustomInterest(event.target.value)} maxLength={200} />
+                  </StepContent>
+                )}
+
+                {step === 2 && mode === 'celebrity' && (
+                  <StepContent kicker="02 — YOUR ROLE" title="あなたは、どんな有名人ですか？" sub="役割を選ぶか、自分で入力してください。架空の有名人として体験できます。">
+                    <div className={styles.tagGrid} aria-label="有名人の役割">
+                      {ROLE_OPTIONS.map(role => <button key={role} type="button" className={styles.tag} aria-pressed={celebrityRole === role} onClick={() => setCelebrityRole(role)}>{role}</button>)}
+                    </div>
+                    <label className={styles.customLabel} htmlFor="celebrity-role">あなたの役割</label>
+                    <input id="celebrity-role" className={styles.customInput} placeholder="例：ソロで活動するロックミュージシャン" value={celebrityRole} onChange={e => setCelebrityRole(e.target.value)} maxLength={300} />
+                  </StepContent>
+                )}
+
+                {step === 2 && mode === 'community' && (
+                  <StepContent kicker="02 — YOUR COMMUNITY" title="どの界隈の雰囲気を味わいたいですか？" sub="界隈を選ぶか、自由に入力してください。架空の住人が、その界隈らしい会話や空気を再現します。">
+                    <div className={styles.tagGrid} aria-label="体験する界隈">
+                      {COMMUNITY_OPTIONS.map(value => <button key={value} type="button" className={styles.tag} aria-pressed={community === value} onClick={() => setCommunity(value)}>{value}</button>)}
+                    </div>
+                    <label className={styles.customLabel} htmlFor="community">体験する界隈</label>
+                    <input id="community" className={styles.customInput} placeholder="例：小さなライブハウスに通うV系界隈" value={community} onChange={e => setCommunity(e.target.value)} maxLength={300} />
                   </StepContent>
                 )}
 
                 {step === 3 && (
                   <StepContent kicker="03 — YOUR ATMOSPHERE" title="あなたの理想のタイムラインは？">
                     <div className={styles.choices}>
-                      {ATMOSPHERE_OPTIONS.map(opt => (
+                      {atmosphereOptions(mode).map(opt => (
                         <ChoiceCard key={opt.value} selected={atmosphere === opt.value} onClick={() => setAtmosphere(opt.value)} label={opt.label} desc={opt.desc} />
                       ))}
                     </div>
@@ -192,7 +203,7 @@ export default function OnboardingPage() {
                 )}
 
                 {step === 4 && (
-                  <StepContent kicker="04 — YOUR BOUNDARIES" title="この世界から消したいものを選んでください" sub="複数選択可・選ばなくてもOK">
+                  <StepContent kicker="04 — YOUR BOUNDARIES" title="避けたい反応や話題はありますか？" sub="複数選択可。未選択なら、選んだモード本来の雰囲気で始まります。">
                     <div className={styles.choices}>
                       {EXCLUSION_OPTIONS.map(opt => (
                         <ChoiceCard key={opt.value} selected={exclusions.includes(opt.value)} onClick={() => toggleExclusion(opt.value)} label={opt.label} multi />

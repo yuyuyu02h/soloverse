@@ -10,6 +10,7 @@ process.env.LLM_PROVIDER_ORDER = 'groq';
 process.env.GROQ_API_KEY = 'test-only';
 process.env.GROQ_MODELS = 'celebrity-test';
 process.env.LLM_REQUEST_INTERVAL_MS = '0';
+process.env.CONTENT_REVIEW = 'false';
 
 const { db, initDB } = require('../src/db/schema');
 const {
@@ -73,7 +74,7 @@ test.after(() => {
 
 test('admiredだけが裏側で有名人モードになる', async () => {
   assert.equal(await experienceMode('star'), 'celebrity');
-  assert.equal(await experienceMode('friend'), 'community');
+  assert.equal(await experienceMode('friend'), 'hobby');
 });
 
 test('投稿直後は0件で、最初はゆっくり、その後大きく増える', () => {

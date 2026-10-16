@@ -42,6 +42,7 @@ app.use(async (_, __, next) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/timeline', timelineRoutes);
 app.get('/api/health', (_, res) => res.json({

@@ -1,0 +1,43 @@
+{
+  "fictionalOnly": true,
+  "requestCap": 3,
+  "processed": 1,
+  "scene": {
+    "status": "ready"
+  },
+  "comments": [
+    {
+      "content": "リハーサルで声がしっかり出たんだね！本番も楽しみです",
+      "category": "praise"
+    },
+    {
+      "content": "今日は声が出やすかったと聞いて、ステージがさらに輝きそう",
+      "category": "praise"
+    },
+    {
+      "content": "リハーサルの後のあの爽快感、私も経験したことあるなぁ",
+      "category": "empathy"
+    },
+    {
+      "content": "声が出て気持ちよかったって、まさにアーティストの喜びだよね",
+      "category": "empathy"
+    },
+    {
+      "content": "次のセットリスト、どんな曲を入れる予定ですか？",
+      "category": "question"
+    },
+    {
+      "content": "声が出て気持ちよかった…マイクが羨ましそうに見えてたよ",
+      "category": "humor"
+    },
+    {
+      "content": "声が安定すると、バンド全体のテンポやダイナミクスが上がりやすいね",
+      "category": "analysis"
+    },
+    {
+      "content": "リハーサルでの好調は、本番のパフォーマンス向上に直結する兆しだと思う",
+      "category": "analysis"
+    }
+  ],
+  "requests": 2
+}

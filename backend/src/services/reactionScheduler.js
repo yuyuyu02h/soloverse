@@ -3,6 +3,7 @@ const { db } = require('../db/schema');
 const { callLLM, buildWorldSystemPrompt, safeParseJSON } = require('./llm');
 const { serializeWorldTask } = require('./worldTasks');
 const { enabled } = require('./contentConfig');
+const { themeState, currentVersion } = require('./worldTheme');
 
 function analyzeEngagementIntent(value) {
   const content = String(value || '').normalize('NFKC').trim();
@@ -26,16 +27,17 @@ function directReplyDelayMinutes() {
 }
 
 async function queueReaction({ userId, characterId, postId, type, delayMinutes }) {
+  const settings = await themeState(userId);
   await db.execute({
-    sql: `INSERT INTO reaction_queue (id, user_id, character_id, post_id, reaction_type, scheduled_at) VALUES (?, ?, ?, ?, ?, ?)`,
-    args: [uuidv4(), userId, characterId, postId, type, new Date(Date.now() + delayMinutes * 60000).toISOString()],
+    sql: `INSERT INTO reaction_queue (id, user_id, character_id, post_id, reaction_type, scheduled_at,theme_version) VALUES (?, ?, ?, ?, ?, ?,?)`,
+    args: [uuidv4(), userId, characterId, postId, type, new Date(Date.now() + delayMinutes * 60000).toISOString(),settings?.theme_version || 1],
   });
 }
 
 // 通常投稿へのリアクションをスケジュール
 async function scheduleReactions(userId, postId, postContent) {
   const [charsResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ? ORDER BY RANDOM()', args: [userId] }),
+    db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')} ORDER BY RANDOM()`, args: [userId] }),
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
   ]);
 
@@ -79,24 +81,19 @@ async function scheduleReactions(userId, postId, postContent) {
 
 // リプライ投稿へのAI反応をスケジュール（確率低め・1〜2人のみ）
 async function scheduleReplyReactions(userId, replyPostId, replyContent, parentPostId) {
-  const [charsResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ? ORDER BY RANDOM() LIMIT 3', args: [userId] }),
-    db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
-  ]);
-
-  if (!settingsResult.rows[0] || !charsResult.rows.length) return;
-
-  // リプライへの反応は1〜2人、かつ40%の確率でのみ実施
-  for (const char of charsResult.rows.slice(0, 2)) {
-    if (Math.random() > 0.4) continue;
-
-    const delayMinutes = calcDelay(char.delay_profile) + Math.floor(Math.random() * 10) + 5;
-    await db.execute({
-      sql: `INSERT INTO reaction_queue (id, user_id, character_id, post_id, reaction_type, scheduled_at) VALUES (?, ?, ?, ?, 'reply', ?)`,
-      args: [uuidv4(), userId, char.id, replyPostId,
-        new Date(Date.now() + delayMinutes * 60000).toISOString()],
-    });
+  const settings = await themeState(userId);
+  if (!settings) return null;
+  const parent = (await db.execute({ sql: 'SELECT author_id,author_type FROM posts WHERE id=? AND user_id=?', args: [parentPostId,userId] })).rows[0];
+  const chars = (await db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id=? AND ${currentVersion('c')} ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END,RANDOM() LIMIT 2`, args: [userId,parent?.author_type === 'ai' ? parent.author_id : ''] })).rows;
+  const direct = analyzeEngagementIntent(replyContent).wantsReply || parent?.author_type === 'ai';
+  let count = 0;
+  for (const [index,char] of chars.entries()) {
+    if (!(direct && index === 0) && Math.random() > 0.4) continue;
+    await queueReaction({ userId,characterId:char.id,postId:replyPostId,type:'reply',delayMinutes:direct && index === 0 ? directReplyDelayMinutes() : calcDelay(char.delay_profile)+5 });
+    count++;
+    if (settings.position === 'admired') break;
   }
+  return { replyCount:count,directReply:direct && count>0,replyWithinMinutes:direct && count>0 ? directReplyMaximumMinutes() : null };
 }
 
 function calcDelay(delayProfile) {
@@ -115,6 +112,7 @@ async function backfillDirectReplies() {
           FROM posts p JOIN world_settings w ON w.user_id=p.user_id
           WHERE p.author_type = 'user' AND p.reply_to IS NULL
             AND w.position != 'admired'
+            AND ${currentVersion('p')}
             AND datetime(p.created_at) <= datetime('now', '-2 minutes')
             AND datetime(p.created_at) >= datetime('now', '-24 hours')
             AND NOT EXISTS (
@@ -132,7 +130,7 @@ async function backfillDirectReplies() {
   for (const post of candidates.rows) {
     if (!analyzeEngagementIntent(post.content).wantsReply) continue;
     const character = await db.execute({
-      sql: 'SELECT id FROM ai_characters WHERE user_id = ? ORDER BY RANDOM() LIMIT 1',
+      sql: `SELECT id FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')} ORDER BY RANDOM() LIMIT 1`,
       args: [post.user_id],
     });
     if (!character.rows[0]) continue;
@@ -150,16 +148,18 @@ async function backfillDirectReplies() {
 }
 
 async function processReactionQueue() {
+  const worlds = (await db.execute('SELECT DISTINCT user_id FROM reaction_queue WHERE done=0')).rows;
+  for (const row of worlds) await themeState(row.user_id);
   // 有名人モードは観客シーンが反応を担当する。切替前に残った通常キューも処理しない。
-  await db.execute(`UPDATE reaction_queue SET done=1
-                    WHERE done=0 AND user_id IN (
-                      SELECT user_id FROM world_settings WHERE position='admired'
-                    )`);
+  await db.execute(`UPDATE reaction_queue AS rq SET done=1 WHERE done=0 AND (
+    NOT (${currentVersion('rq')}) OR (user_id IN (SELECT user_id FROM world_settings WHERE position='admired')
+    AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.id=rq.post_id AND p.reply_to IS NOT NULL)))`);
   await backfillDirectReplies();
   const pending = await db.execute({
     sql: `SELECT rq.*, ac.name, ac.username, ac.personality, ac.reply_style, ac.interests
           FROM reaction_queue rq JOIN ai_characters ac ON rq.character_id = ac.id
           WHERE rq.done = 0 AND datetime(rq.scheduled_at) <= datetime('now')
+            AND ${currentVersion('rq')} AND ${currentVersion('ac')}
           ORDER BY datetime(rq.scheduled_at) ASC LIMIT 20`,
   });
 
@@ -218,14 +218,15 @@ async function processReply(item) {
     if (!current || current.done) return;
   }
   const [postResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT content, reply_to FROM posts WHERE id = ? AND user_id=?', args: [item.post_id, item.user_id] }),
-    db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [item.user_id] }),
+    db.execute({ sql: 'SELECT content, reply_to,theme_version FROM posts WHERE id = ? AND user_id=?', args: [item.post_id, item.user_id] }),
+    themeState(item.user_id),
   ]);
   if (!postResult.rows[0]) return;
 
   const post = postResult.rows[0];
-  const settings = settingsResult.rows[0];
+  const settings = settingsResult;
   if (!settings) return;
+  if (post.theme_version !== settings.theme_version || item.theme_version !== settings.theme_version) return;
   const charInfo = {
     name: item.name, username: item.username,
     personality: item.personality, interests: item.interests,
@@ -248,6 +249,12 @@ async function processReply(item) {
       replyTarget = `親投稿: ${parentPost.rows[0].content}\n返信対象: ${post.content}`;
       promptText = `スレッドの流れ:「${parentPost.rows[0].content}」\n\nこれへの返信:「${post.content}」\n\nこの返信に対してコメントしてください。`;
     }
+    const ancestors = (await db.execute({ sql: `WITH RECURSIVE chain(id,content,reply_to,depth) AS (
+      SELECT id,content,reply_to,0 FROM posts WHERE id=? AND user_id=? AND theme_version=?
+      UNION ALL SELECT p.id,p.content,p.reply_to,chain.depth+1 FROM posts p JOIN chain ON p.id=chain.reply_to
+      WHERE p.user_id=? AND p.theme_version=? AND chain.depth<5)
+      SELECT content,depth FROM chain ORDER BY depth DESC`, args: [item.post_id,item.user_id,settings.theme_version,item.user_id,settings.theme_version] })).rows;
+    replyTarget = `会話（古い順）:\n${ancestors.map(p => p.content).join('\n')}\n今答える投稿: ${post.content}`;
   }
 
   const history = await db.execute({
@@ -258,14 +265,14 @@ async function processReply(item) {
   const char = enabled() ? (await db.execute({ sql: 'SELECT * FROM ai_characters WHERE id=? AND user_id=?', args: [item.character_id, item.user_id] })).rows[0] : null;
   if (enabled() && !char) return;
   const replyContent = enabled()
-    ? await require('./contentPipeline').generateReply(item.user_id, char, settings, replyTarget)
+    ? await require('./contentPipeline').generateReply(item.user_id, char, settings, replyTarget, { question: post.content })
     : (await callLLM(system, promptText, 350)).trim().slice(0, 140);
   if (!replyContent) throw new Error('空の返信が返されました');
 
   const replyId = enabled() ? `reaction-${item.id}` : uuidv4();
   if (enabled()) {
     await db.batch([
-      { sql: `INSERT OR IGNORE INTO posts(id,user_id,author_id,author_type,content,reply_to,ai) VALUES(?,?,?,'ai',?,?,1)`, args: [replyId,item.user_id,item.character_id,replyContent,item.post_id] },
+      { sql: `INSERT OR IGNORE INTO posts(id,user_id,author_id,author_type,content,reply_to,ai,theme_version) VALUES(?,?,?,'ai',?,?,1,?)`, args: [replyId,item.user_id,item.character_id,replyContent,item.post_id,item.theme_version] },
       { sql: `INSERT OR IGNORE INTO notifications(id,user_id,type,character_id,post_id) VALUES(?,?,'reply',?,?)`, args: [replyId,item.user_id,item.character_id,replyId] },
       { sql: 'UPDATE reaction_queue SET done=1 WHERE id=? AND user_id=?', args: [item.id,item.user_id] },
     ], 'write');
@@ -273,8 +280,8 @@ async function processReply(item) {
     return;
   }
   await db.execute({
-    sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai) VALUES (?, ?, ?, 'ai', ?, ?, 1)`,
-    args: [replyId, item.user_id, item.character_id, replyContent, item.post_id],
+    sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai,theme_version) VALUES (?, ?, ?, 'ai', ?, ?, 1,?)`,
+    args: [replyId, item.user_id, item.character_id, replyContent, item.post_id,item.theme_version],
   });
   await db.execute({
     sql: `INSERT INTO notifications (id, user_id, type, character_id, post_id) VALUES (?, ?, 'reply', ?, ?)`,
@@ -283,12 +290,13 @@ async function processReply(item) {
 }
 
 async function seedTimeline(userId) {
+  await themeState(userId);
   const existing = await db.execute({
-    sql: "SELECT id FROM posts WHERE user_id = ? AND author_type = 'ai' LIMIT 1", args: [userId],
+    sql: `SELECT id FROM posts p WHERE user_id = ? AND ${currentVersion('p')} AND author_type = 'ai' LIMIT 1`, args: [userId],
   });
   if (existing.rows.length) return 0;
   const [charsResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ?', args: [userId] }),
+    db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')}`, args: [userId] }),
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
   ]);
   const chars = charsResult.rows;
@@ -331,8 +339,8 @@ JSON配列のみ出力（説明・\`\`\`不要）:
     seen.add(char.id);
     const hoursAgo = Math.floor(Math.random() * 72) + 1;
     statements.push({
-      sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, created_at, ai) VALUES (?, ?, ?, 'ai', ?, ?, 1)`,
-      args: [uuidv4(), userId, char.id, content, new Date(Date.now() - hoursAgo * 3600000).toISOString()],
+      sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, created_at, ai,theme_version) VALUES (?, ?, ?, 'ai', ?, ?, 1,?)`,
+      args: [uuidv4(), userId, char.id, content, new Date(Date.now() - hoursAgo * 3600000).toISOString(),(await themeState(userId)).theme_version],
     });
   }
   if (!statements.length) throw new Error('有効な初期投稿を生成できませんでした');

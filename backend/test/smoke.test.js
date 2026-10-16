@@ -1,5 +1,6 @@
 const test = require('node:test');
 process.env.CONTENT_PIPELINE ||= 'legacy';
+process.env.CONTENT_REVIEW = 'false';
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const os = require('node:os');
@@ -32,7 +33,7 @@ const llmServer = http.createServer((req, res) => {
         avatar_seed: `seed_${offset + index}`,
         bio: 'テスト用の住人',
         personality: '明るい',
-        interests: '音楽',
+        interests: body.messages[0].content.match(/【テーマ・趣味[^\n]*\n([^\n]+)/)?.[1] || '音楽',
         reply_style: '短く共感する',
         reaction_frequency: 'mid',
         delay_profile: 'normal',

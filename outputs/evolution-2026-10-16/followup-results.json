@@ -1,0 +1,17 @@
+{
+  "syntheticOnly": true,
+  "question": "そのキャラクターの魅力が分かる場面を、台詞を引用せずに教えて。",
+  "previousAnswer": "わかる! 私はヨーダが好きです。小さくても深いフォースの教えが心に響くからです。",
+  "scheduled": {
+    "replyCount": 1,
+    "directReply": true,
+    "replyWithinMinutes": 3
+  },
+  "answers": [
+    {
+      "author_id": "385a3033-a7bc-482a-92b8-f35169ec1735",
+      "content": "わかる！ヨーダの魅力は、ルークが沼で苦しむときに静かに背中を支えてくれるシーンです。小さな存在が大きな導きを示す瞬間です。"
+    }
+  ],
+  "sameResident": true
+}

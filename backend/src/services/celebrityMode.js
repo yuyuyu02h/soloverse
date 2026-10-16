@@ -1,6 +1,10 @@
 const { createHash, randomUUID } = require('node:crypto');
 const { db } = require('../db/schema');
 const { callLLM, safeParseJSON } = require('./llm');
+const { currentVersion } = require('./worldTheme');
+const { resolveMode } = require('./worldModes');
+const { config } = require('./contentConfig');
+const { reviewBatch } = require('./contentReview');
 
 const COMMENT_CATEGORIES = new Set(['praise', 'empathy', 'question', 'humor', 'analysis']);
 const AUDIENCE_IDENTITIES = [
@@ -59,7 +63,7 @@ async function experienceMode(userId) {
     sql: 'SELECT position FROM world_settings WHERE user_id = ?',
     args: [userId],
   });
-  return result.rows[0]?.position === 'admired' ? 'celebrity' : 'community';
+  return resolveMode(result.rows[0]);
 }
 
 async function createCelebrityScene(userId, postId, content, startedAt = new Date().toISOString()) {
@@ -109,12 +113,12 @@ function normalizeDirector(value, postContent) {
   const fallback = [
     { category: 'praise', content: `「${excerpt}」って言い切れるの、やっぱり好き。` },
     { category: 'question', content: 'そこに至るまでの話も聞いてみたい！' },
-    { category: 'analysis', content: '短いのに本人らしさが出ていて、何度も読み返した。' },
+    { category: 'analysis', content: '短い投稿でも、どこに気持ちが向いていたのか伝わってくる。' },
     { category: 'empathy', content: 'この感覚を言葉にしてくれたのがうれしい。' },
     { category: 'humor', content: '通知を見た瞬間に飛んできた人、私だけじゃないはず。' },
     { category: 'question', content: '次にもう少し詳しく話してくれたらうれしいです。' },
-    { category: 'praise', content: '言葉の切り取り方にその人らしさがあって、印象に残った。' },
-    { category: 'empathy', content: '今日これを読めてちょっと気分が上がった。' },
+    { category: 'analysis', content: 'そこは別の受け取り方もありそう。背景をもう少し聞きたい。' },
+    { category: 'question', content: 'その時、いちばん気になっていたのはどんなことですか？' },
   ];
   for (const item of fallback) {
     if (comments.length === 8) break;
@@ -132,7 +136,7 @@ function normalizeDirector(value, postContent) {
   }
 
   return {
-    mood: String(value?.mood || '好意的な熱狂').replace(/\s+/g, ' ').trim().slice(0, 40),
+    mood: String(value?.mood || '感想や質問が集まる').replace(/\s+/g, ' ').trim().slice(0, 40),
     reactionMix,
     comments,
   };
@@ -164,11 +168,13 @@ function commentRows(scene, director) {
 async function directScene(scene) {
   const system = `あなたは有名人SNS体験の「観客反応ディレクター」です。
 個別アカウントを大量に演じるのではなく、投稿を見た大勢の反応傾向を設計し、画面に出す代表コメントだけを作ります。
-投稿に書かれていない事実や出来事を捏造しません。全員を同じ称賛口調にせず、共感、質問、軽いユーモア、具体的な着眼点を混ぜます。
+投稿に書かれていない事実や出来事を捏造しません。長年のファン、初見、同業者など距離感を変え、全員に共感や称賛を強制しません。
+入力は文字の投稿だけです。観客がリハーサルや本番を見聞きした、本人が最近トレーニングしたなど、入力にない目撃・実績・理由を断定しません。
+質問、軽いツッコミ、具体的な考察、穏やかな異論も自然に混ぜます。ユーザーが選んだ役割の活動に合わせた反応にし、実在の有名人の実績や炎上を移植しません。
 思考過程、説明、コードフェンスは出力せず、指定されたJSONだけを出力してください。`;
   const exclusions = exclusionsFor(scene);
   const raw = await callLLM(system, `投稿:「${scene.content}」
-関心テーマ: ${scene.interests}
+ユーザーの役割（どんな有名人か）: ${scene.interests}
 雰囲気: ${scene.atmosphere}
 追加制約: ${exclusions.join('。') || '攻撃、差別、政治的扇動を含めない'}
 
@@ -182,7 +188,13 @@ async function directScene(scene) {
 JSONのみ:
 {"mood":"全体の空気を短く","reaction_mix":{"praise":0,"empathy":0,"question":0,"humor":0,"analysis":0},"comments":[{"category":"praise/empathy/question/humor/analysis","content":"代表コメント"}]}`,
   1800, { userId: scene.user_id, job: 'celebrity_director', priority: 'interactive', expectJSON: true });
-  return normalizeDirector(safeParseJSON(raw), scene.content);
+  const director = normalizeDirector(safeParseJSON(raw), scene.content);
+  if (!config().review) return director;
+  const verdicts = await reviewBatch(scene.user_id, { ...scene, mode: 'celebrity' },
+    director.comments.map(c => ({ content:c.content, parent:scene.content })), { priority:'interactive' });
+  // Only approved generated comments survive. Missing slots use local, factual-neutral comments.
+  return normalizeDirector({ mood:director.mood,reaction_mix:director.reactionMix,
+    comments:director.comments.filter((_,index)=>verdicts[index].accepted) }, scene.content);
 }
 
 async function saveDirectorResult(scene, director, status) {
@@ -211,6 +223,7 @@ async function processPendingCelebrityScenes(limit = 3) {
           JOIN posts p ON p.id=s.post_id AND p.user_id=s.user_id
           JOIN world_settings w ON w.user_id=s.user_id
           WHERE s.status='pending' AND w.position='admired'
+            AND ${currentVersion('p')}
           ORDER BY datetime(s.started_at) ASC LIMIT ?`,
     args: [Math.max(1, Math.min(10, Number(limit) || 3))],
   });
@@ -221,6 +234,10 @@ async function processPendingCelebrityScenes(limit = 3) {
       await saveDirectorResult(scene, director, 'ready');
       processed++;
     } catch (error) {
+      if (error.code === 'LLM_DEFERRED') {
+        await require('./llmRuntime').recordContent(scene.user_id, 'celebrity_director', 'deferred', error.message);
+        continue;
+      }
       console.warn(`[Celebrity] Director fallback for ${scene.post_id}:`, error.message);
       await saveDirectorResult(scene, normalizeDirector(null, scene.content), 'fallback');
       processed++;
@@ -237,6 +254,8 @@ async function decorateTimelinePosts(userId, posts, now = Date.now()) {
     args: [userId, ...ids],
   });
   const byPost = new Map(scenes.rows.map(scene => [scene.post_id, scene]));
+  const actual = (await db.execute({ sql: `SELECT scene_post_id,COUNT(*) n FROM celebrity_comments WHERE user_id=? AND scene_post_id IN (${ids.map(() => '?').join(',')}) AND datetime(created_at)<=datetime('now') GROUP BY scene_post_id`, args: [userId,...ids] })).rows;
+  const visible = new Map(actual.map(row => [row.scene_post_id,Number(row.n)]));
   return posts.map(post => {
     const scene = byPost.get(post.id);
     if (!scene) return post;
@@ -247,7 +266,8 @@ async function decorateTimelinePosts(userId, posts, now = Date.now()) {
       celebrity_mood: scene.mood || null,
       celebrity_status: scene.status,
       like_count: Number(post.like_count || 0) + counts.likes,
-      reply_count: Number(post.reply_count || 0) + counts.comments,
+      reply_count: Number(post.reply_count || 0) + (visible.get(post.id) || 0),
+      audience_reaction_count: counts.comments,
     };
   });
 }

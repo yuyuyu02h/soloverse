@@ -7,6 +7,7 @@ const { randomUUID } = require('node:crypto');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-content-'));
 process.env.DB_PATH = path.join(dir, 'test.db');
 process.env.CONTENT_PIPELINE = 'enhanced';
+process.env.CONTENT_REVIEW = 'false';
 process.env.LLM_PROVIDER_ORDER = 'groq';
 process.env.GROQ_API_KEY = 'test-only';
 process.env.GROQ_MODELS = 'content-test';
@@ -214,7 +215,8 @@ test('legacy switch stops candidate publication and returns original seed behavi
   assert.equal((await db.execute('SELECT * FROM content_candidates')).rows.length, 4);
 });
 
-test('templates are optional, capped, and do not call APIs when budget exhausted', async () => {
+test('hobby templates are optional, capped, and do not call APIs when budget exhausted', async () => {
+  await db.execute("UPDATE world_settings SET position='empathy' WHERE user_id='owner'");
   process.env.CONTENT_TEMPLATES = 'true';
   process.env.LLM_DAILY_TOKEN_BUDGET = '100';
   for (let i = 0; i < 4; i++) {

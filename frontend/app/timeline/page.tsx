@@ -32,6 +32,12 @@ export default function TimelinePage() {
 
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [historyMode, setHistoryMode] = useState(false);
+  const [theme, setTheme] = useState('');
+  const [modeLabel, setModeLabel] = useState('');
+  const historyRef = useRef(false);
+  const epochRef = useRef(0);
+  const themeVersionRef = useRef(1);
 
   const latestCreatedAt = useRef<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -69,14 +75,25 @@ export default function TimelinePage() {
   }, []);
 
   const initTimeline = async () => {
+    const epoch = ++epochRef.current;
+    latestCreatedAt.current = null;
+    postsRef.current = [];
+    setPosts([]);
     setLoading(true);
     setTimelineError('');
     try {
       setSeeding(true);
-      await api.post('/api/timeline/seed', {});
+      let seedError = '';
+      try { await api.post('/api/timeline/seed', {}); }
+      catch (e) { seedError = e instanceof Error ? e.message : 'AIの投稿を準備できませんでした'; }
       setSeeding(false);
 
-      const data = await api.get('/api/timeline?page=0');
+      const data = await api.get('/api/timeline?page=0' + (historyRef.current ? '&history=true' : ''));
+      if (epoch !== epochRef.current) return;
+      setTheme(data.theme || '');
+      setModeLabel(data.modeLabel || '');
+      themeVersionRef.current = data.themeVersion || 1;
+      setTimelineError(seedError);
       setPosts(data.posts);
       setHasMore(data.posts.length === 30);
       if (data.posts.length > 0) {
@@ -89,11 +106,10 @@ export default function TimelinePage() {
       console.error('Init error:', e);
       setTimelineError(e instanceof Error ? e.message : 'タイムラインを読み込めませんでした');
     } finally {
-      setLoading(false);
-      setSeeding(false);
+      if (epoch === epochRef.current) { setLoading(false); setSeeding(false); }
     }
 
-    if (mountedRef.current) startPolling();
+    if (mountedRef.current && epoch === epochRef.current) startPolling();
   };
 
   const startPolling = () => {
@@ -101,19 +117,22 @@ export default function TimelinePage() {
     pollIntervalRef.current = setInterval(async () => {
       if (pollingRef.current) return;
       pollingRef.current = true;
+      const epoch = epochRef.current;
       try {
         // 差分のみ取得（sinceパラメータで最新投稿以降だけ）
         const sinceParam = latestCreatedAt.current
           ? '?since=' + encodeURIComponent(latestCreatedAt.current)
           : '?page=0';
-        const data = await api.get('/api/timeline' + sinceParam);
+        const historyParam = historyRef.current ? '&history=true' : '';
+        const data = await api.get('/api/timeline' + sinceParam + historyParam);
         const visible = postsRef.current;
         const refreshed: Post[] = [];
         for (let i = 0; i < visible.length; i += 100) {
-          const result = await api.get('/api/timeline?ids=' + encodeURIComponent(visible.slice(i, i + 100).map(p => p.id).join(',')));
+          const result = await api.get('/api/timeline?ids=' + encodeURIComponent(visible.slice(i, i + 100).map(p => p.id).join(',')) + historyParam);
           refreshed.push(...result.posts);
         }
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || epoch !== epochRef.current) return;
+        if (data.themeVersion !== themeVersionRef.current) { void initTimeline(); return; }
         setPosts(prev => mergePosts(refreshed, prev));
 
         if (data.posts && data.posts.length > 0) {
@@ -152,12 +171,13 @@ export default function TimelinePage() {
       const ids = postsRef.current.filter(post => post.experience_mode === 'celebrity').map(post => post.id).slice(0, 100);
       if (!ids.length || busy) return;
       busy = true;
+      const epoch = epochRef.current;
       try {
         const [result, notifications] = await Promise.all([
           api.get('/api/timeline?ids=' + encodeURIComponent(ids.join(','))),
           api.get('/api/timeline/notifications/unread-count'),
         ]);
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || epoch !== epochRef.current) return;
         setPosts(previous => mergePosts(result.posts, previous));
         setUnreadCount(notifications.count);
       } catch (e) { console.error('Celebrity refresh error:', e); }
@@ -174,7 +194,9 @@ export default function TimelinePage() {
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const data = await api.get('/api/timeline?before=' + encodeURIComponent(oldest.created_at) + '&beforeId=' + encodeURIComponent(oldest.id));
+      const epoch = epochRef.current;
+      const data = await api.get('/api/timeline?before=' + encodeURIComponent(oldest.created_at) + '&beforeId=' + encodeURIComponent(oldest.id) + (historyRef.current ? '&history=true' : ''));
+      if (epoch !== epochRef.current) return;
       const incoming = data.posts as Post[];
       setPosts(prev => {
         const prevIds = new Set(prev.map(p => p.id));
@@ -228,7 +250,7 @@ export default function TimelinePage() {
 
   const handleReplySent = async (postId: string) => {
     try {
-      const data = await api.get('/api/timeline?ids=' + encodeURIComponent(postId));
+      const data = await api.get('/api/timeline?ids=' + encodeURIComponent(postId) + (historyRef.current ? '&history=true' : ''));
       setPosts(previous => mergePosts(data.posts, previous));
     } catch (e) { console.error('Reply refresh error:', e); }
   };
@@ -284,6 +306,12 @@ export default function TimelinePage() {
 
       {/* メイン */}
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
+        <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, borderBottom: '1px solid #2f3336' }}>
+          <span style={{ color: '#a6aeb7', fontSize: 13, overflowWrap: 'anywhere' }}>{modeLabel && <small style={{ display: 'block', color: '#a89bd9', marginBottom: 4 }}>{modeLabel}</small>}{theme || 'あなたの世界'}</span>
+          <label style={{ color: '#a6aeb7', fontSize: 12, whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={historyMode} disabled={loading} onChange={e => { historyRef.current = e.target.checked; setHistoryMode(e.target.checked); void initTimeline(); }} /> 過去の体験も表示
+          </label>
+        </div>
 
         {/* 投稿ボックス */}
         <div style={{ padding: '14px 16px', borderBottom: '1px solid #2f3336' }}>
@@ -404,7 +432,7 @@ export default function TimelinePage() {
         <TrendPanel
           onClose={() => setShowTrend(false)}
           onTrendClick={handleTrendClick}
-          onWorldRebuilt={initTimeline}
+          onWorldRebuilt={async () => { historyRef.current = false; setHistoryMode(false); setReplyTarget(null); setPostText(''); setPostNotice(''); await initTimeline(); }}
         />
       )}
     </div>

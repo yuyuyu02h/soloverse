@@ -150,14 +150,14 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
                   </svg>
                   {(likeCounts[r.id] || 0) > 0 && <span>{formatCount(likeCounts[r.id])}</span>}
                 </button>
-                {!r.synthetic && <button onClick={() => setReplyTo(r)} style={{ marginTop: 8, background: 'none', border: 0, color: '#1d9bf0', cursor: 'pointer' }}>この投稿に返信</button>}
+                {!r.synthetic && !post.archived && <button onClick={() => setReplyTo(r)} style={{ marginTop: 8, background: 'none', border: 0, color: '#1d9bf0', cursor: 'pointer' }}>この投稿に返信</button>}
               </div>
             </div>
           ))}
         </div>
 
         {/* 返信入力 */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid #2f3336' }}>
+        {post.archived ? <p style={{ padding: 16, color: '#a6aeb7', fontSize: 13 }}>以前のテーマの投稿です。履歴として閲覧できます。</p> : <div style={{ padding: '12px 16px', borderTop: '1px solid #2f3336' }}>
           <div style={{ display: 'flex', gap: 10 }}>
             <Avatar seed={undefined} name={currentUser.username} size={34} />
             <div style={{ flex: 1 }}>
@@ -185,7 +185,7 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
               </div>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

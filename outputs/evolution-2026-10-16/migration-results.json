@@ -1,0 +1,56 @@
+{
+  "tables": [
+    {
+      "table": "users",
+      "rows": 4,
+      "unchanged": true
+    },
+    {
+      "table": "world_settings",
+      "rows": 2,
+      "unchanged": true
+    },
+    {
+      "table": "ai_characters",
+      "rows": 20,
+      "unchanged": true
+    },
+    {
+      "table": "posts",
+      "rows": 210,
+      "unchanged": true
+    },
+    {
+      "table": "likes",
+      "rows": 2,
+      "unchanged": true
+    },
+    {
+      "table": "reaction_queue",
+      "rows": 0,
+      "unchanged": true
+    },
+    {
+      "table": "notifications",
+      "rows": 2,
+      "unchanged": true
+    },
+    {
+      "table": "trends",
+      "rows": 3,
+      "unchanged": true
+    },
+    {
+      "table": "content_candidates",
+      "rows": 193,
+      "unchanged": true
+    },
+    {
+      "table": "resident_profiles",
+      "rows": 20,
+      "unchanged": true
+    }
+  ],
+  "integrity": "ok",
+  "foreignKeyErrors": 0
+}

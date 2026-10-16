@@ -1,0 +1,77 @@
+{
+  "fictionalOnly": true,
+  "requestCap": 6,
+  "communityCandidates": 4,
+  "communityPublished": 4,
+  "communityPosts": [
+    {
+      "content": "新作ジャケ、カラーリングがすごく映えてる。実物見たらもっと衝撃的だったかも。",
+      "reply_to": null
+    },
+    {
+      "content": "新しく出た対盤、どの曲が一番ヘドバンしやすいですか？",
+      "reply_to": null
+    },
+    {
+      "content": "最近のセトリはベースが前に出てる曲が増えてます。特に2022年のライブは低音が効いてました。",
+      "reply_to": "4b523ac5-571b-49a7-892d-582886c8e915"
+    },
+    {
+      "content": "昨日のライブ、物販列が長くてチェキは3時間待ちだった…でも限定Tシャツは即完売でした。",
+      "reply_to": null
+    }
+  ],
+  "audienceProcessed": 0,
+  "audience": [],
+  "events": [
+    {
+      "job": "celebrity_director",
+      "outcome": "deferred",
+      "reason": "provider_quota",
+      "n": 1
+    },
+    {
+      "job": "publish",
+      "outcome": "published",
+      "reason": "llm",
+      "n": 11
+    },
+    {
+      "job": "reply",
+      "outcome": "accepted",
+      "reason": "accepted",
+      "n": 2
+    },
+    {
+      "job": "reply",
+      "outcome": "generated",
+      "reason": "candidate",
+      "n": 2
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "accepted",
+      "reason": "accepted",
+      "n": 11
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "deferred",
+      "reason": "provider_unavailable",
+      "n": 1
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "generated",
+      "reason": "candidate",
+      "n": 11
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "screened",
+      "reason": "accepted",
+      "n": 11
+    }
+  ],
+  "requests": 2
+}

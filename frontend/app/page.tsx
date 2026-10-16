@@ -258,7 +258,7 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className={styles.footer}><span>SOLOVERSE PROTOCOL</span><span>© 2026</span></footer>
+      <footer className={styles.footer}><span>SOLOVERSE PROTOCOL</span><a href="/admin" style={{ color: 'inherit', textDecoration: 'none' }}>管理者ログイン</a><span>© 2026</span></footer>
     </div>
   );
 }

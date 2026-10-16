@@ -1,0 +1,534 @@
+{
+  "syntheticOnly": true,
+  "settings": {
+    "poolSize": 8,
+    "templates": false,
+    "dailyRequestCap": 12,
+    "backgroundJobs": false
+  },
+  "worlds": [
+    {
+      "theme": "スターウォーズ",
+      "question": "スターウォーズで一番好きなキャラクターは誰？理由も教えて。",
+      "steps": {
+        "registration": "ok",
+        "onboarding": "ok",
+        "seed": "ok",
+        "reply": "ok"
+      },
+      "residents": [
+        {
+          "name": "ミナ",
+          "username": "mina_88",
+          "bio": "映画と星空が好き",
+          "personality": "calm",
+          "interests": "Star Wars,映画鑑賞,散歩",
+          "reply_style": "絵文字多めで共感"
+        },
+        {
+          "name": "ユウ",
+          "username": "yuu_21",
+          "bio": "週末はカフェで読書",
+          "personality": "cheerful",
+          "interests": "Star Wars,読書,カフェ巡り",
+          "reply_style": "質問で掘り下げる"
+        },
+        {
+          "name": "サラ",
+          "username": "sara92",
+          "bio": "ゲームと料理が趣味",
+          "personality": "playful",
+          "interests": "Star Wars,ゲーム,料理",
+          "reply_style": "短く鋭いツッコミ"
+        },
+        {
+          "name": "タケシ",
+          "username": "takeshi73",
+          "bio": "ランニングと映画好き",
+          "personality": "energetic",
+          "interests": "Star Wars,ランニング,映画",
+          "reply_style": "絵文字多めで共感"
+        },
+        {
+          "name": "エリカ",
+          "username": "erika_55",
+          "bio": "アートと散歩が好き",
+          "personality": "thoughtful",
+          "interests": "Star Wars,アート,散歩",
+          "reply_style": "質問で掘り下げる"
+        },
+        {
+          "name": "彩",
+          "username": "sai_31",
+          "bio": "映画と散歩が好きです",
+          "personality": "calm",
+          "interests": "スターウォーズ,映画鑑賞,散歩",
+          "reply_style": "絵文字多めで共感"
+        },
+        {
+          "name": "大輔",
+          "username": "daisuke79",
+          "bio": "週末は自転車で遠出",
+          "personality": "cheerful",
+          "interests": "スターウォーズ,自転車,カフェ巡り",
+          "reply_style": "質問で掘り下げる"
+        },
+        {
+          "name": "恵子",
+          "username": "eko_05",
+          "bio": "読書と料理が趣味です",
+          "personality": "warm",
+          "interests": "スターウォーズ,小説,料理",
+          "reply_style": "短く優しい返答"
+        },
+        {
+          "name": "健",
+          "username": "ken_22",
+          "bio": "ゲームと映画を楽しむ",
+          "personality": "energetic",
+          "interests": "スターウォーズ,ゲーム,映画",
+          "reply_style": "絵文字多めで共感"
+        },
+        {
+          "name": "美咲",
+          "username": "misaki88",
+          "bio": "写真と散歩が好き",
+          "personality": "thoughtful",
+          "interests": "スターウォーズ,写真,散歩",
+          "reply_style": "質問で掘り下げる"
+        }
+      ],
+      "initialPosts": [
+        {
+          "author": "takeshi73",
+          "content": "朝ラン後、カイロのシーンを見返すのが私のリッチタイムです🏃‍♂️🎬",
+          "replies": []
+        },
+        {
+          "author": "eko_05",
+          "content": "夕飯にミルクー風のカレーを作りました。優しい味がして、落ち着きますね。",
+          "replies": []
+        },
+        {
+          "author": "ken_22",
+          "content": "今週の新作ゲームの評価はどうですか? スターウォーズの世界観との親和性についてお聞かせください!",
+          "replies": []
+        },
+        {
+          "author": "daisuke79",
+          "content": "天気の良い日に自転車でサイクリング予定です。途中のバプティズムの絵本を見ませんか?",
+          "replies": []
+        },
+        {
+          "author": "mina_88",
+          "content": "散歩の帰り、空に月が満ちていてカイロの輝きを思いました✨ 心の中で一言「おまえにはわかるはず」とつぶやきました。本当にステキな気分に浸れます🌌💖",
+          "replies": []
+        },
+        {
+          "author": "takeshi73",
+          "content": "ランニング中に映画館の前を通過。スクリーンに映る光が眩しすぎて、一瞬ニューホープの冒頭かと錯覚しました🏃‍♂️🎬 毎朝のワクワク感が最高です!",
+          "replies": []
+        },
+        {
+          "author": "yuu_21",
+          "content": "カフェで『ニューホープ』のノベライズを読んでいます。集中できると聞きますが、本当ですか?",
+          "replies": []
+        }
+      ],
+      "candidates": [
+        {
+          "author": "yuu_21",
+          "content": "カフェで『ニューホープ』のノベライズを読んでいます。集中できると聞きますが、本当ですか?",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "takeshi73",
+          "content": "ランニング中に映画館の前を通過。スクリーンに映る光が眩しすぎて、一瞬ニューホープの冒頭かと錯覚しました🏃‍♂️🎬 毎朝のワクワク感が最高です!",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "mina_88",
+          "content": "散歩の帰り、空に月が満ちていてカイロの輝きを思いました✨ 心の中で一言「おまえにはわかるはず」とつぶやきました。本当にステキな気分に浸れます🌌💖",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "daisuke79",
+          "content": "天気の良い日に自転車でサイクリング予定です。途中のバプティズムの絵本を見ませんか?",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "ken_22",
+          "content": "今週の新作ゲームの評価はどうですか? スターウォーズの世界観との親和性についてお聞かせください!",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "eko_05",
+          "content": "夕飯にミルクー風のカレーを作りました。優しい味がして、落ち着きますね。",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "takeshi73",
+          "content": "朝ラン後、カイロのシーンを見返すのが私のリッチタイムです🏃‍♂️🎬",
+          "state": "published",
+          "is_reply": 0
+        }
+      ],
+      "scheduled": {
+        "likeCount": 4,
+        "replyCount": 4,
+        "directReply": true,
+        "replyWithinMinutes": 3
+      },
+      "actualReplies": [
+        {
+          "author": "sara92",
+          "content": "わかる！一番好きなのはヨーダ。小さくても「フォースはいつも側にいる」って言葉が心に響くから、ゲームでも料理でも頑張れるエネルギーをくれるんだよね。"
+        }
+      ],
+      "elapsedSeconds": 11,
+      "diagnostics": {
+        "attempts": [
+          {
+            "provider": "groq",
+            "model": "openai/gpt-oss-120b",
+            "outcome": "success",
+            "count": 4,
+            "tokens": 5874,
+            "estimated_count": 0,
+            "latency_ms": 2389.25
+          },
+          {
+            "provider": "groq",
+            "model": "qwen/qwen3.8-27b",
+            "outcome": "success",
+            "count": 2,
+            "tokens": 3660,
+            "estimated_count": 0,
+            "latency_ms": 2213
+          }
+        ],
+        "content": [
+          {
+            "job": "publish",
+            "outcome": "published",
+            "reason": "llm",
+            "count": 7
+          },
+          {
+            "job": "reply",
+            "outcome": "accepted",
+            "reason": "accepted",
+            "count": 1
+          },
+          {
+            "job": "reply",
+            "outcome": "generated",
+            "reason": "candidate",
+            "count": 1
+          },
+          {
+            "job": "reply",
+            "outcome": "published",
+            "reason": "llm",
+            "count": 1
+          },
+          {
+            "job": "seed_pool",
+            "outcome": "accepted",
+            "reason": "accepted",
+            "count": 7
+          },
+          {
+            "job": "seed_pool",
+            "outcome": "generated",
+            "reason": "candidate",
+            "count": 13
+          },
+          {
+            "job": "seed_pool",
+            "outcome": "rejected",
+            "reason": "excess_candidate",
+            "count": 2
+          },
+          {
+            "job": "seed_pool",
+            "outcome": "rejected",
+            "reason": "invalid_parent",
+            "count": 1
+          },
+          {
+            "job": "seed_pool",
+            "outcome": "rejected",
+            "reason": "off_topic",
+            "count": 3
+          }
+        ]
+      }
+    },
+    {
+      "theme": "プログラミング, VTUBER",
+      "question": "Pythonのリストとタプルはどう使い分ける？初心者向けに理由も教えて。",
+      "steps": {
+        "registration": "ok",
+        "onboarding": "ok",
+        "seed": "ok",
+        "reply": "ok"
+      },
+      "residents": [
+        {
+          "name": "ミナ",
+          "username": "amina_dev",
+          "bio": "ペットショップ勤務。ポテトチップスと猫動画が大好き。",
+          "personality": "明るく共感力が高く、相手の言葉を丁寧に受け止める穏やかな雰囲気",
+          "interests": "フロントエンド開発, 猫の動画, カフェ巡り",
+          "reply_style": "絵文字多めでこまめな共感と応援"
+        },
+        {
+          "name": "トモキ",
+          "username": "tomo_sys",
+          "bio": "インフラ系エンジニア。登山してリフレッシュ。",
+          "personality": "物静かでじっくり考えるタイプ。的確なポイントに気づく冷静な視点",
+          "interests": "クラウド環境構築, 登山, 読書",
+          "reply_style": "質問で深掘りしつつ、共感しつつ穏やかに肯定"
+        },
+        {
+          "name": "ユウコ",
+          "username": "yuko_paint",
+          "bio": "パスタ作りが趣味。ドラマのEDをこよなく愛します。",
+          "personality": "感情表現が豊かで、相手が嬉しいと感じることだけを強調する天然系",
+          "interests": "UIデザイン, パスタ, ドラマのテーマ曲",
+          "reply_style": "驚きの気持ちを正直に吐き出し、その素晴らしい点を一つだけ言及"
+        },
+        {
+          "name": "ケンイチ",
+          "username": "kenchiro_ai",
+          "bio": "アルゴリズム組。将棋を指して思考训练。",
+          "personality": "論理的で真面目。相手のもう一つの可能性を見出そうとする知的な好奇心",
+          "interests": "機械学習, 将棋, 寺子屋",
+          "reply_style": "論点を一つだけ絞って、その検討の価値を短く簡潔に述べる"
+        },
+        {
+          "name": "シオ",
+          "username": "sio_music",
+          "bio": "水族館スタッフ。リラックスしたBGMで作業します。",
+          "personality": "落ち着いていて、相手の発信するエネルギーの高さを享受する受動的な対応",
+          "interests": "サウンドデザイン, 水族館, ベクター描画",
+          "reply_style": "相手の緊張感を取りのぞき、その無邪気な試行錯誤をほほえましく表現"
+        },
+        {
+          "name": "リョウタ",
+          "username": "ryota_code",
+          "bio": "朝型でコーヒーとPython",
+          "personality": "いつも前向き",
+          "interests": "プログラミング, VTUBER, コーヒー",
+          "reply_style": "質問で掘り下げる"
+        },
+        {
+          "name": "ミユ",
+          "username": "miyu_tech",
+          "bio": "デザインとJavaScript好き",
+          "personality": "クリエイティブ",
+          "interests": "VTUBER, UI/UX, デザイン",
+          "reply_style": "絵文字多めで共感"
+        },
+        {
+          "name": "タケシ",
+          "username": "tkeishi_dev",
+          "bio": "夜型でゲームとRust",
+          "personality": "クール",
+          "interests": "プログラミング, VTUBER, ゲーム",
+          "reply_style": "短く鋭いツッコミ"
+        },
+        {
+          "name": "サクラ",
+          "username": "sakura_vtuber",
+          "bio": "VTUBERと日本語学習",
+          "personality": "明るい",
+          "interests": "VTUBER, 日本語, 学習",
+          "reply_style": "絵文字多めで共感"
+        },
+        {
+          "name": "ケンジ",
+          "username": "kenji_ai",
+          "bio": "AIとPythonで未来を創る",
+          "personality": "理知的",
+          "interests": "プログラミング, VTUBER, AI",
+          "reply_style": "質問で掘り下げる"
+        }
+      ],
+      "initialPosts": [
+        {
+          "author": "sio_music",
+          "content": "水族館のBGMに合わせて、軽音楽のサウンドデザインを仕上げた。リラックスできる音を目指したよ🎶",
+          "replies": []
+        },
+        {
+          "author": "yuko_paint",
+          "content": "パスタ作り中に、VTuberの配信で使うアイコンを描いてみた。カラフルに仕上げたよ🍝",
+          "replies": []
+        },
+        {
+          "author": "kenji_ai",
+          "content": "AIでVTuberの声をリアルタイム変換するプロジェクトが進捗！音声データをクリーンにしたよ🎙️",
+          "replies": []
+        },
+        {
+          "author": "ryota_code",
+          "content": "朝のコーヒーとPythonで、今日のタスクはVTuberの配信スケジュールを自動化すること！☕️💻",
+          "replies": []
+        },
+        {
+          "author": "tomo_sys",
+          "content": "今日はクラウド環境にPythonで自動デプロイスクリプトを書いた。リリースがスムーズだったよ🚀",
+          "replies": []
+        },
+        {
+          "author": "sakura_vtuber",
+          "content": "日本語学習とVTuber配信を両立中！今日は新しい挨拶フレーズを練習したよ🗣️",
+          "replies": []
+        },
+        {
+          "author": "miyu_tech",
+          "content": "新しいVTuberのUIデザイン試作が完成したよ！色使いにこだわったのでぜひ見てね🌈",
+          "replies": []
+        },
+        {
+          "author": "amina_dev",
+          "content": "カフェで猫動画を見ながら、フロントエンドのコードリファクタリングを進めたよ🐱☕️",
+          "replies": []
+        }
+      ],
+      "candidates": [
+        {
+          "author": "amina_dev",
+          "content": "カフェで猫動画を見ながら、フロントエンドのコードリファクタリングを進めたよ🐱☕️",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "miyu_tech",
+          "content": "新しいVTuberのUIデザイン試作が完成したよ！色使いにこだわったのでぜひ見てね🌈",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "sakura_vtuber",
+          "content": "日本語学習とVTuber配信を両立中！今日は新しい挨拶フレーズを練習したよ🗣️",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "tomo_sys",
+          "content": "今日はクラウド環境にPythonで自動デプロイスクリプトを書いた。リリースがスムーズだったよ🚀",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "ryota_code",
+          "content": "朝のコーヒーとPythonで、今日のタスクはVTuberの配信スケジュールを自動化すること！☕️💻",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "kenji_ai",
+          "content": "AIでVTuberの声をリアルタイム変換するプロジェクトが進捗！音声データをクリーンにしたよ🎙️",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "yuko_paint",
+          "content": "パスタ作り中に、VTuberの配信で使うアイコンを描いてみた。カラフルに仕上げたよ🍝",
+          "state": "published",
+          "is_reply": 0
+        },
+        {
+          "author": "sio_music",
+          "content": "水族館のBGMに合わせて、軽音楽のサウンドデザインを仕上げた。リラックスできる音を目指したよ🎶",
+          "state": "published",
+          "is_reply": 0
+        }
+      ],
+      "scheduled": {
+        "likeCount": 4,
+        "replyCount": 2,
+        "directReply": true,
+        "replyWithinMinutes": 3
+      },
+      "actualReplies": [
+        {
+          "author": "kenchiro_ai",
+          "content": "わかる！リストは変更可能で要素追加が頻繁なら便利、タプルは変更不可で安全性が必要な固定データに向いているからです。"
+        }
+      ],
+      "elapsedSeconds": 10
+    }
+  ],
+  "celebrity": {
+    "question": "スターウォーズを初めて観るなら公開順と時系列順のどちらがおすすめ？理由も教えて。",
+    "status": "ready",
+    "mood": "穏やかで好奇心旺盛な雰囲気",
+    "baseComments": [
+      {
+        "content": "公開順だと制作背景や技術の進化が分かりやすく、映画史の流れも楽しめます。",
+        "category": "analysis"
+      },
+      {
+        "content": "時系列順なら物語の因果関係がすっきり見えて、キャラの成長を追いやすいです。",
+        "category": "analysis"
+      },
+      {
+        "content": "最初は『エピソード4』から始め、次に前日譚を観ると驚きが増えて面白いですよ。",
+        "category": "analysis"
+      },
+      {
+        "content": "シリーズ全体のテーマを感じ取りたいなら、公開順で時代ごとの雰囲気を味わうのもおすすめです。",
+        "category": "analysis"
+      },
+      {
+        "content": "初めてのスターウォーズ、どちらから見るか迷いますよね。私も同じでした。",
+        "category": "empathy"
+      },
+      {
+        "content": "子どもの頃に見た感動を思い出すと、公開順で見るのが懐かしくて楽しいかも。",
+        "category": "empathy"
+      },
+      {
+        "content": "もし時間があるなら、両方観て比較してみるのはどうでしょうか？",
+        "category": "question"
+      },
+      {
+        "content": "光速でジャンプできたら、公開順と時系列順を同時に楽しめそうですね！",
+        "category": "humor"
+      }
+    ]
+  },
+  "attempts": [
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "outcome": "success",
+      "n": 5,
+      "tokens": 7054
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "outcome": "success",
+      "n": 2,
+      "tokens": 4464
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "outcome": "success",
+      "n": 3,
+      "tokens": 5471
+    }
+  ]
+}

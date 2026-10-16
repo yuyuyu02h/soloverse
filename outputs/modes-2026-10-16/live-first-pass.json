@@ -1,0 +1,138 @@
+{
+  "fictionalOnly": true,
+  "requestCap": 18,
+  "worlds": [
+    {
+      "mode": "hobby",
+      "context": "自作キーボード",
+      "residents": [
+        {
+          "name": "田中 翔",
+          "username": "taka_key",
+          "role": "初心者",
+          "bio": "自作キーボードに触れながら日常を楽しむ30代。",
+          "personality": "自作キーボードの選定基準やスイッチ感覚を語るのが得意です。",
+          "replyStyle": "具体例を添えて簡潔に答える"
+        },
+        {
+          "name": "山本 梨子",
+          "username": "riko_mods",
+          "role": "詳しい人",
+          "bio": "初心者向けに自作キーボードの基礎をシェア中。",
+          "personality": "初心者が躓きやすいポイントを分かりやすく説明します。",
+          "replyStyle": "やさしい語り口で質問に答える"
+        },
+        {
+          "name": "佐々木 大樹",
+          "username": "daiki_build",
+          "role": "実践する人",
+          "bio": "週末に実践、オリジナルキーボードを組むのが趣味。",
+          "personality": "実際に作業した経験から、部品選びや組み立て手順を語ります。",
+          "replyStyle": "作業手順を順序立てて提示する"
+        },
+        {
+          "name": "木下 彩",
+          "username": "aya_ask",
+          "role": "質問好き",
+          "bio": "自作キーボードに関する質問が好きです。",
+          "personality": "疑問点を掘り下げて、みんなで答えを探すのが好きです。",
+          "replyStyle": "質問形式で返すことが多い"
+        },
+        {
+          "name": "中村 悠",
+          "username": "yuu_casual",
+          "role": "気軽に楽しむ人",
+          "bio": "気軽に自作キーボードの魅力を楽しむ日々。",
+          "personality": "自作キーボードのデザインや音色の話題で気軽に盛り上げます。",
+          "replyStyle": "軽いコメントで共感を示す"
+        },
+        {
+          "name": "鈴木 海斗",
+          "username": "kaito_keys",
+          "role": "初心者",
+          "bio": "週末はキーボードのスイッチ比較に没頭しています。",
+          "personality": "新しいスイッチの感触をレビューし、音質の違いを語るのが得意です。",
+          "replyStyle": "具体例と数値で説明する"
+        },
+        {
+          "name": "高橋 由美",
+          "username": "yumi_modder",
+          "role": "詳しい人",
+          "bio": "自作キーボードの改造でオリジナリティを追求中。",
+          "personality": "ケース加工やレーザー刻印のテクニックを共有します。",
+          "replyStyle": "丁寧に手順を分解して伝える"
+        },
+        {
+          "name": "松本 大輔",
+          "username": "daisuke_builds",
+          "role": "実践する人",
+          "bio": "PCB設計から組み立てまで、一貫して手がけています。",
+          "personality": "自作PCBのレイアウトや配線最適化のポイントを解説します。",
+          "replyStyle": "ステップごとに要点をまとめる"
+        },
+        {
+          "name": "井上 彩乃",
+          "username": "ayano_queries",
+          "role": "質問好き",
+          "bio": "疑問が湧いたらすぐに質問、みんなで解決します。",
+          "personality": "トラブル時の診断手順や情報源の探し方を質問形式で引き出すのが好きです。",
+          "replyStyle": "相手の疑問を掘り下げて返す"
+        },
+        {
+          "name": "藤田 陽",
+          "username": "yo_keyplay",
+          "role": "気軽に楽しむ人",
+          "bio": "キーボードの見た目と音色で日常に彩りを。",
+          "personality": "デザインバランスやサウンドプロファイルの感想を軽くシェアします。",
+          "replyStyle": "短く共感と感想を添える"
+        }
+      ]
+    }
+  ],
+  "error": "/api/timeline/seed: 500: シード生成に失敗しました",
+  "externalCalls": 4,
+  "attempts": [
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "residents",
+      "outcome": "success",
+      "tokens": 2238
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "residents",
+      "outcome": "success",
+      "tokens": 2677
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "job": "seed_pool",
+      "outcome": "rate_limited",
+      "tokens": 7982
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "job": "seed_pool",
+      "outcome": "quality_rejected",
+      "tokens": 3952
+    }
+  ],
+  "events": [
+    {
+      "job": "seed_pool",
+      "outcome": "generated",
+      "reason": "candidate",
+      "count": 4
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "rejected",
+      "reason": "off_topic",
+      "count": 4
+    }
+  ]
+}

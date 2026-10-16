@@ -3,6 +3,8 @@ const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { authMiddleware: authenticate } = require('../middleware/auth');
 const { scheduleReactions, scheduleReplyReactions, generateAITimelinePosts } = require('../services/reactionScheduler');
+const { themeState, currentVersion } = require('../services/worldTheme');
+const { serializeWorldTask } = require('../services/worldTasks');
 const {
   experienceMode,
   createCelebrityScene,
@@ -31,6 +33,7 @@ router.get('/', authenticate, async (req, res) => {
   const offset = page * limit;
 
   try {
+    const settings = await themeState(userId);
     let sql, args;
 
     if (since) {
@@ -82,6 +85,7 @@ router.get('/', authenticate, async (req, res) => {
          ORDER BY datetime(p.created_at) DESC, p.id DESC LIMIT ?`;
       args = [userId, userId, String(req.query.before), String(req.query.before), String(req.query.beforeId), limit];
     }
+    if (req.query.history !== 'true') sql = sql.replace('WHERE p.user_id = ?', `WHERE p.user_id = ? AND ${currentVersion('p')}`);
     const posts = await db.execute({ sql, args });
     const decoratedPosts = await decorateTimelinePosts(userId, posts.rows);
 
@@ -114,10 +118,11 @@ router.get('/', authenticate, async (req, res) => {
 
     const enriched = decoratedPosts.map(p => ({
       ...p,
+      archived: p.theme_version !== (settings?.theme_version || 1),
       reply_preview: repliesMap[p.id] || [],
     }));
 
-    res.json({ posts: enriched });
+    res.json({ posts: enriched, theme: settings?.interests || '', mode: settings?.mode || 'hobby', modeLabel: settings?.mode_label || '趣味共感モード', themeVersion: settings?.theme_version || 1 });
   } catch (e) {
     console.error('Timeline error:', e);
     res.status(500).json({ error: 'タイムライン取得に失敗しました' });
@@ -134,59 +139,63 @@ router.post('/post', authenticate, async (req, res) => {
   if (replyTo != null && typeof replyTo !== 'string') return res.status(400).json({ error: '返信先が不正です' });
 
   try {
-    if (replyTo) {
-      const target = await db.execute({
-        sql: 'SELECT id FROM posts WHERE id = ? AND user_id = ?',
-        args: [replyTo, userId],
-      });
-      if (!target.rows.length) return res.status(404).json({ error: '返信先の投稿が見つかりません' });
-    }
-
-    const postId = uuidv4();
-    const createdAt = new Date().toISOString();
-    const user = await db.execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] });
-
-    await db.execute({
-      sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, created_at, ai) VALUES (?, ?, ?, 'user', ?, ?, ?, 0)`,
-      args: [postId, userId, userId, content.trim(), replyTo || null, createdAt],
-    });
-
-    let scheduled = null;
-    let initialLikeCount = 0;
-    let initialReplyCount = 0;
-    const mode = await experienceMode(userId);
-    if (!replyTo) {
-      // admired は個別住人を大量に作らず、観客全体の演出を別経路で準備する。
-      try {
-        if (mode === 'celebrity') {
-          scheduled = await createCelebrityScene(userId, postId, content.trim(), createdAt);
-          initialLikeCount = scheduled.likeCount;
-          initialReplyCount = scheduled.commentCount;
-        } else {
-          scheduled = await scheduleReactions(userId, postId, content.trim());
-        }
-      } catch (e) {
-        // 投稿自体は保存済みなので、リアクション予約だけの失敗で投稿を500にしない。
-        console.error('Schedule error:', e);
+    return await serializeWorldTask(userId, async () => {
+      const settings = await themeState(userId);
+      const version = settings?.theme_version || 1;
+      if (replyTo) {
+        const target = await db.execute({
+          sql: 'SELECT id,theme_version FROM posts WHERE id = ? AND user_id = ?',
+          args: [replyTo, userId],
+        });
+        if (!target.rows.length) return res.status(404).json({ error: '返信先の投稿が見つかりません' });
+        if (target.rows[0].theme_version !== version) return res.status(409).json({ error: '以前のテーマの投稿は閲覧専用です。現在のテーマで新しく投稿してください' });
       }
-    } else if (mode !== 'celebrity') {
-      // リプライ投稿: リプライへのAI反応もスケジュール（確率低め）
-      scheduleReplyReactions(userId, postId, content.trim(), replyTo).catch(e => console.error('Reply schedule error:', e));
-    }
 
-    res.json({
-      success: true,
-      scheduled,
-      post: {
-        id: postId, user_id: userId, author_id: userId, author_type: 'user',
-        content: content.trim(), reply_to: replyTo || null,
-        author_name: user.rows[0]?.username || 'あなた',
-        author_handle: user.rows[0]?.username || 'you',
-        experience_mode: mode,
-        like_count: initialLikeCount, reply_count: initialReplyCount, user_liked: 0,
-        reply_preview: [],
-        created_at: createdAt,
-      },
+      const postId = uuidv4();
+      const createdAt = new Date().toISOString();
+      const user = await db.execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] });
+
+      await db.execute({
+        sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, created_at, ai,theme_version) VALUES (?, ?, ?, 'user', ?, ?, ?, 0,?)`,
+        args: [postId, userId, userId, content.trim(), replyTo || null, createdAt,version],
+      });
+
+      let scheduled = null;
+      let initialLikeCount = 0;
+      let initialReplyCount = 0;
+      const mode = await experienceMode(userId);
+      if (!replyTo) {
+        // admired は個別住人を大量に作らず、観客全体の演出を別経路で準備する。
+        try {
+          if (mode === 'celebrity') {
+            scheduled = await createCelebrityScene(userId, postId, content.trim(), createdAt);
+            initialLikeCount = scheduled.likeCount;
+            initialReplyCount = scheduled.commentCount;
+          } else {
+            scheduled = await scheduleReactions(userId, postId, content.trim());
+          }
+        } catch (e) {
+          // 投稿自体は保存済みなので、リアクション予約だけの失敗で投稿を500にしない。
+          console.error('Schedule error:', e);
+        }
+      } else {
+        scheduled = await scheduleReplyReactions(userId, postId, content.trim(), replyTo);
+      }
+
+      res.json({
+        success: true,
+        scheduled,
+        post: {
+          id: postId, user_id: userId, author_id: userId, author_type: 'user',
+          content: content.trim(), reply_to: replyTo || null,
+          author_name: user.rows[0]?.username || 'あなた',
+          author_handle: user.rows[0]?.username || 'you',
+          experience_mode: mode,
+          like_count: initialLikeCount, reply_count: initialReplyCount, user_liked: 0,
+          reply_preview: [],
+          created_at: createdAt, theme_version: version,
+        },
+      });
     });
   } catch (e) {
     console.error('Post error:', e);
@@ -307,7 +316,7 @@ router.post('/notifications/celebrity-settings', authenticate, async (req, res) 
 router.get('/trends', authenticate, async (req, res) => {
   try {
     const trends = await db.execute({
-      sql: `SELECT * FROM trends WHERE user_id = ? ORDER BY post_count DESC`, args: [req.userId],
+      sql: `SELECT * FROM trends t WHERE user_id = ? AND ${currentVersion('t')} ORDER BY post_count DESC`, args: [req.userId],
     });
     res.json({ trends: trends.rows });
   } catch (e) { res.status(500).json({ error: 'トレンド取得に失敗しました' }); }
@@ -320,7 +329,7 @@ router.get('/characters', authenticate, async (req, res) => {
       sql: `SELECT c.*,
               (SELECT COUNT(*) FROM likes WHERE liker_id = c.id AND user_id = ?) as total_likes_given,
               (SELECT COUNT(*) FROM posts WHERE author_id = c.id AND user_id = ?)  as total_posts
-            FROM ai_characters c WHERE c.user_id = ? ORDER BY datetime(c.created_at) ASC, c.id ASC`,
+            FROM ai_characters c WHERE c.user_id = ? AND ${currentVersion('c')} ORDER BY datetime(c.created_at) ASC, c.id ASC`,
       args: [req.userId, req.userId, req.userId],
     });
     res.json({ characters: chars.rows });
@@ -331,8 +340,9 @@ router.get('/characters', authenticate, async (req, res) => {
 router.post('/seed', authenticate, async (req, res) => {
   const userId = req.userId;
   try {
+    await themeState(userId);
     const existing = await db.execute({
-      sql: `SELECT COUNT(*) as count FROM posts WHERE user_id = ? AND author_type = 'ai'`, args: [userId],
+      sql: `SELECT COUNT(*) as count FROM posts p WHERE user_id = ? AND ${currentVersion('p')} AND author_type = 'ai'`, args: [userId],
     });
     if (existing.rows[0]?.count > 0) return res.json({ message: '既に投稿があります' });
     await generateAITimelinePosts(userId);

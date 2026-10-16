@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { authMiddleware, generateToken } = require('../middleware/auth');
+const { isAdminUser } = require('../middleware/admin');
 
 const router = express.Router();
 
@@ -67,7 +68,7 @@ router.post('/register', async (req, res) => {
 });
 
 // ログイン
-router.post('/login', async (req, res) => {
+async function login(req, res, adminLogin = false) {
   const ip = req.ip || req.connection.remoteAddress;
   if (!checkRateLimit(ip)) {
     return res.status(429).json({ error: 'リクエストが多すぎます。15分後に再試行してください。' });
@@ -78,6 +79,7 @@ router.post('/login', async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ error: 'メールとパスワードを入力してください' });
   }
+  if (email.length > 254 || password.length > 128) return res.status(400).json({ error: '入力が長すぎます' });
   try {
     const result = await db.execute({
       sql: 'SELECT * FROM users WHERE email = ?',
@@ -89,7 +91,8 @@ router.post('/login', async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'メールアドレスまたはパスワードが違います' });
 
-    const token = generateToken(user.id);
+    if (adminLogin && !isAdminUser(user.id)) return res.status(403).json({ error: '管理者として許可されたアカウントを使用してください' });
+    const token = generateToken(user.id, adminLogin ? 'admin' : 'user');
     res.json({
       token,
       userId: user.id,
@@ -100,7 +103,9 @@ router.post('/login', async (req, res) => {
     console.error(e);
     res.status(500).json({ error: 'サーバーエラー' });
   }
-});
+}
+router.post('/login', (req, res) => login(req, res));
+router.post('/admin/login', (req, res) => login(req, res, true));
 
 // localStorageの表示情報を信頼せず、現在のセッション状態をDBから再取得する。
 router.get('/me', authMiddleware, async (req, res) => {

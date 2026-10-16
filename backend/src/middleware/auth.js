@@ -45,14 +45,15 @@ async function authMiddleware(req, res, next) {
     }
 
     req.userId = decoded.userId;
+    req.tokenScope = decoded.scope || 'user';
     next();
   } catch {
     return res.status(401).json({ error: 'トークンが無効です', code: 'INVALID_TOKEN' });
   }
 }
 
-function generateToken(userId) {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '30d' });
+function generateToken(userId, scope = 'user') {
+  return jwt.sign({ userId, scope }, JWT_SECRET, { expiresIn: scope === 'admin' ? '1h' : '30d' });
 }
 
 module.exports = { authMiddleware, generateToken };

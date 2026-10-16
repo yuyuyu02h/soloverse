@@ -1,0 +1,143 @@
+{
+  "syntheticOnly": true,
+  "ruleDecisions": [
+    {
+      "content": "週末の自転車遠出で、ミレニアムファルコンのように風を切って走ったよ！🚴‍♂️",
+      "assessment": {
+        "accepted": true,
+        "reason": "accepted",
+        "scores": {
+          "relevance": 1,
+          "specificity": 1,
+          "persona": 1,
+          "novelty": 1
+        }
+      }
+    },
+    {
+      "content": "ヨーダの「大丈夫、フォースはあなたと共に」って言葉に心が癒される。💚",
+      "assessment": {
+        "accepted": false,
+        "reason": "unverified_quote",
+        "scores": {
+          "relevance": 1,
+          "specificity": 1,
+          "persona": 1,
+          "novelty": 1
+        }
+      }
+    },
+    {
+      "content": "ダースベイダーの激しいライトセーバー対決を映画で観て、胸が熱くなった！🔥",
+      "assessment": {
+        "accepted": true,
+        "reason": "accepted",
+        "scores": {
+          "relevance": 1,
+          "specificity": 1,
+          "persona": 1,
+          "novelty": 1
+        }
+      }
+    },
+    {
+      "content": "カフェでミスト・オブ・ホワイトのサンドイッチを食べながら、ジェダイの歴史を読んだよ。☕️",
+      "assessment": {
+        "accepted": true,
+        "reason": "accepted",
+        "scores": {
+          "relevance": 1,
+          "specificity": 1,
+          "persona": 1,
+          "novelty": 1
+        }
+      }
+    },
+    {
+      "content": "ミレニアムファルコンのエンジン音、音量設定を調整するコツが分かって嬉しい！🔧",
+      "assessment": {
+        "accepted": false,
+        "reason": "roleplay",
+        "scores": {
+          "relevance": 1,
+          "specificity": 1,
+          "persona": 1,
+          "novelty": 1
+        }
+      }
+    },
+    {
+      "content": "ライトセーバーを振り回してみたけど、まだまだ初心者。練習が必要だね。💡",
+      "assessment": {
+        "accepted": false,
+        "reason": "roleplay",
+        "scores": {
+          "relevance": 1,
+          "specificity": 1,
+          "persona": 1,
+          "novelty": 1
+        }
+      }
+    },
+    {
+      "content": "アナキンの転落を考察したら、音楽と映像で表現するとよりリアルに感じられる。🎶",
+      "assessment": {
+        "accepted": true,
+        "reason": "accepted",
+        "scores": {
+          "relevance": 1,
+          "specificity": 1,
+          "persona": 1,
+          "novelty": 1
+        }
+      }
+    },
+    {
+      "content": "ダースベイダーの登場シーンで流れるドラマチックな音楽を聴くと、料理中も手が止まって映画に引き込まれちゃうんだよね！🎵",
+      "assessment": {
+        "accepted": true,
+        "reason": "accepted",
+        "scores": {
+          "relevance": 1,
+          "specificity": 1,
+          "persona": 1,
+          "novelty": 1
+        }
+      }
+    }
+  ],
+  "reviewDecisions": [
+    {
+      "content": "週末の自転車遠出で、ミレニアムファルコンのように風を切って走ったよ！🚴‍♂️",
+      "accepted": false,
+      "reason": "off_topic"
+    },
+    {
+      "content": "ダースベイダーの激しいライトセーバー対決を映画で観て、胸が熱くなった！🔥",
+      "accepted": true,
+      "reason": "accepted"
+    },
+    {
+      "content": "カフェでミスト・オブ・ホワイトのサンドイッチを食べながら、ジェダイの歴史を読んだよ。☕️",
+      "accepted": false,
+      "reason": "off_topic"
+    },
+    {
+      "content": "アナキンの転落を考察したら、音楽と映像で表現するとよりリアルに感じられる。🎶",
+      "accepted": true,
+      "reason": "accepted"
+    },
+    {
+      "content": "ダースベイダーの登場シーンで流れるドラマチックな音楽を聴くと、料理中も手が止まって映画に引き込まれちゃうんだよね！🎵",
+      "accepted": true,
+      "reason": "accepted"
+    }
+  ],
+  "attempts": [
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "outcome": "success"
+    }
+  ]
+}

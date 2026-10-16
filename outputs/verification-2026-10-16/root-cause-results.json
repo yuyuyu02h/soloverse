@@ -1,0 +1,96 @@
+{
+  "transport": "Local stub only; no external requests",
+  "experiments": [
+    {
+      "id": "hobby_alone_changes_rejection_to_acceptance_without_any_database",
+      "reproduced": true,
+      "evidence": {
+        "content": "天気の良い日に自転車でサイクリング予定です。途中のバプティズムの絵本を見ませんか?",
+        "themeOnly": "off_topic",
+        "addingOnlyHobby": "自転車",
+        "withHobby": "accepted",
+        "matchedTerms": [
+          "自転車"
+        ]
+      }
+    },
+    {
+      "id": "broad_movie_dictionary_accepts_a_different_movie",
+      "reproduced": true,
+      "evidence": {
+        "content": "昨日観た恋愛映画は、俳優の演技が繊細で最後まで引き込まれた。",
+        "matchedTerms": [
+          "映画",
+          "演技",
+          "俳優"
+        ],
+        "emptyHistory": true,
+        "profileTopics": []
+      }
+    },
+    {
+      "id": "removing_profile_topics_alone_also_rejects_valid_topic_synonyms",
+      "reproduced": true,
+      "evidence": {
+        "content": "今日はクラウド環境にPythonで自動デプロイスクリプトを書いた。リリースがスムーズだったよ🚀",
+        "themeOnly": "off_topic",
+        "implication": "A stricter independent theme check needs domain/entity synonyms or semantic assessment; simply removing hobbies is insufficient."
+      }
+    },
+    {
+      "id": "saved_real_output_replay_in_a_fresh_database",
+      "reproduced": true,
+      "evidence": {
+        "initialPostCount": 0,
+        "correctThemeInOutgoingSystemPrompt": true,
+        "replayedCandidates": 7,
+        "accepted": 7,
+        "published": 7,
+        "unrelatedCyclingPostPublished": 1,
+        "note": "Replays previously observed real output; this experiment itself uses no cloud API."
+      }
+    },
+    {
+      "id": "resident_generation_does_not_validate_theme_alignment",
+      "reproduced": true,
+      "evidence": {
+        "requestedTheme": "スターウォーズ",
+        "acceptedResidents": 10,
+        "allResidentInterests": "自転車,料理",
+        "originalSystemPromptRequestsCorrectTheme": true
+      }
+    },
+    {
+      "id": "cached_resident_profile_survives_theme_and_character_interests_change",
+      "reproduced": true,
+      "evidence": {
+        "newWorldTheme": "映画",
+        "currentCharacterInterests": "映画",
+        "returnedCachedProfileTopics": [
+          "Python",
+          "プログラミング"
+        ]
+      }
+    },
+    {
+      "id": "old_pending_candidate_is_published_without_current_theme_revalidation",
+      "reproduced": true,
+      "evidence": {
+        "newWorldTheme": "映画",
+        "publishedOldContent": "Pythonでデータを整理するスクリプトを書いた。繰り返しの入力を減らせて助かった。",
+        "publishedAfterSwitch": 1
+      }
+    },
+    {
+      "id": "existing_ai_post_prevents_seed_after_settings_only_theme_change",
+      "reproduced": true,
+      "evidence": {
+        "newWorldTheme": "映画",
+        "existingAiPosts": 1,
+        "newSeedPosts": 0,
+        "newLlmCalls": 0
+      }
+    }
+  ],
+  "reproducedExperiments": 8
+}
