@@ -6,7 +6,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ArrowRight, Bot, Eye, EyeOff, Heart, MessageSquare } from 'lucide-react';
 import { api, clearToken, clearUser, getToken, setToken, setUser } from '../lib/api';
 import styles from './page.module.css';
-import { SCREEN_PREVIEW } from '../lib/deployment';
+import { loginCredentials } from '../lib/credentials';
+import { SCREEN_PREVIEW, PRIVATE_APP } from '../lib/deployment';
 
 interface AIPost {
   id: string;
@@ -117,6 +118,7 @@ export default function Home() {
   }, []);
 
   const changeMode = (next: 'login' | 'register') => {
+    if (PRIVATE_APP && next === 'register') return;
     setMode(next);
     setError('');
   };
@@ -129,7 +131,7 @@ export default function Home() {
     try {
       const body = mode === 'register'
         ? { username: regHandle.trim(), email: regEmail.trim(), password: regPassword }
-        : { email: loginEmail.trim(), password: loginPassword };
+        : await loginCredentials(loginEmail,loginPassword);
       const data = await api.post(`/api/auth/${mode}`, body);
       setToken(data.token);
       setUser({ userId: data.userId, username: data.username, onboardingDone: data.onboardingDone });
@@ -156,7 +158,7 @@ export default function Home() {
         {mode === 'register' ? (
           <button type="button" className={styles.headerLogin} onClick={() => changeMode('login')}>ログイン</button>
         ) : (
-          <button type="button" className={styles.headerRegister} onClick={() => changeMode('register')}>新規登録</button>
+          !PRIVATE_APP && <button type="button" className={styles.headerRegister} onClick={() => changeMode('register')}>新規登録</button>
         )}
       </header>
 
@@ -189,7 +191,7 @@ export default function Home() {
                       <span>{checkingSession ? '確認中...' : loading ? 'ログイン中...' : 'ログイン'}</span><ArrowRight size={15} />
                     </button>
                   </form>
-                  <button type="button" className={styles.switchLink} onClick={() => changeMode('register')}>新規登録はこちら</button>
+                  {!PRIVATE_APP && <button type="button" className={styles.switchLink} onClick={() => changeMode('register')}>新規登録はこちら</button>}
                 </motion.div>
               ) : (
                 <motion.div key="register-form" className={styles.formShell} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }}>

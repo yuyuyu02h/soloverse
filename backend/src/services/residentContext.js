@@ -28,3 +28,29 @@ async function residentContext(userId, char) {
   return { profile: JSON.parse(row.profile), memory: recent.map(p => p.content) };
 }
 module.exports = { residentContext };
+
+// Cloudflare: fetch the cast's existing profiles and short memories together,
+// rather than issuing several database calls per resident.
+async function residentContexts(userId, characters, settings) {
+  if (process.env.SOLOVERSE_RUNTIME !== 'cloudflare') {
+    return new Map(await Promise.all(characters.map(async c => [c.id, await residentContext(userId,c)])));
+  }
+  const rows = (await db.execute({sql:`SELECT c.id,r.profile,
+    (SELECT json_group_array(content) FROM (SELECT p.content FROM posts p WHERE p.user_id=c.user_id AND p.theme_version=? AND (p.author_id=c.id OR p.reply_to IN (SELECT id FROM posts WHERE user_id=c.user_id AND author_id=c.id)) ORDER BY datetime(p.created_at) DESC,p.id DESC LIMIT 8)) AS memory
+    FROM ai_characters c LEFT JOIN resident_profiles r ON r.character_id=c.id AND r.user_id=c.user_id WHERE c.user_id=? AND c.id IN (SELECT value FROM json_each(?))`,args:[settings.theme_version,userId,JSON.stringify(characters.map(c=>c.id))]})).rows;
+  const contexts = new Map();
+  const profiles = [];
+  for (const c of characters) {
+    const row = rows.find(r=>r.id===c.id);
+    const fingerprint = JSON.stringify([settings?.interests,settings?.theme_version,c.personality,c.interests,c.reply_style,c.bio,c.delay_profile,c.participation_role,settings?.mode]);
+    let profile; try { profile=JSON.parse(row?.profile || 'null'); } catch {}
+    if (profile?.fingerprint !== fingerprint) {
+      profile={version:3,fingerprint,mode:settings.mode,participation:c.participation_role||'',theme:settings.interests,traits:String(c.personality).slice(0,100),topics:String(c.interests).split(/[,、]/).map(s=>s.trim()).filter(Boolean).slice(0,5),voice:String(c.reply_style).slice(0,100),routine:String(c.bio||'').slice(0,100),activity:c.delay_profile,preferences:[...String(c.personality+' '+(c.bio||'')).matchAll(/([^。、\s]{2,16})が好き/g)].map(m=>m[1]).slice(0,3)};
+      profiles.push([c.id,userId,JSON.stringify(profile)]);
+    }
+    contexts.set(c.id,{profile,memory:JSON.parse(row?.memory||'[]')});
+  }
+  if (profiles.length) await db.execute({sql:`INSERT INTO resident_profiles(character_id,user_id,profile) SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]') FROM json_each(?) WHERE true ON CONFLICT(character_id) DO UPDATE SET profile=excluded.profile`,args:[JSON.stringify(profiles)]});
+  return contexts;
+}
+module.exports.residentContexts = residentContexts;

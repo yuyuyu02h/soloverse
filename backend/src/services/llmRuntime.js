@@ -46,8 +46,12 @@ async function beforeAttempt(target, options, estimatedTokens) {
     throw new DeferredError('provider_quota');
   }
   const id = randomUUID();
-  await db.execute({ sql: `INSERT INTO llm_attempts(id,user_id,job,priority,provider,model,outcome,tokens,estimated,created_at)
-    VALUES(?,?,?,?,?,?,'running',?,1,?)`, args: [id, options.userId || null, options.job || 'unspecified', isBackground ? 'background' : 'interactive', target.providerName, target.model, estimatedTokens, new Date().toISOString()] });
+  const reserved = await db.execute({ sql: `INSERT INTO llm_attempts(id,user_id,job,priority,provider,model,outcome,tokens,estimated,created_at)
+    SELECT ?,?,?,?,?,?,'running',?,1,? WHERE
+    (SELECT COUNT(*) FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')) < ? AND
+    (SELECT COALESCE(SUM(tokens),0) FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')) + ? <= ?
+    RETURNING id`, args: [id, options.userId || null, options.job || 'unspecified', isBackground ? 'background' : 'interactive', target.providerName, target.model, estimatedTokens, new Date().toISOString(), Math.floor(cfg.dailyRequests*fraction),estimatedTokens,cfg.dailyTokens*fraction] });
+  if (!reserved.rows.length) throw new DeferredError('daily_budget');
   return id;
 }
 function resetTime(value) {
@@ -90,6 +94,7 @@ async function orderTargets(targets) {
 }
 async function recordContent(userId, job, outcome, reason, scores = {}) {
   if (!enabled() || !db) return;
+  if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') { db.bufferContent([userId,job,outcome,reason,JSON.stringify(scores),new Date().toISOString()]); return; }
   await db.execute({ sql: 'INSERT INTO content_events(user_id,job,outcome,reason,scores,created_at) VALUES(?,?,?,?,?,?)',
     args: [userId, job, outcome, reason, JSON.stringify(scores), new Date().toISOString()] });
 }

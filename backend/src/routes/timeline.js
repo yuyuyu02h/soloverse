@@ -76,8 +76,8 @@ router.get('/', authenticate, async (req, res) => {
       const ids = [...new Set(req.query.ids.split(',').filter(Boolean))];
       if (!ids.length || ids.length > 100) return res.status(400).json({ error: '投稿IDは1〜100件で指定してください' });
       sql = sql.slice(0, sql.indexOf('WHERE p.user_id = ?')) +
-        `WHERE p.user_id = ? AND p.reply_to IS NULL AND p.id IN (${ids.map(() => '?').join(',')}) ORDER BY datetime(p.created_at) DESC, p.id DESC`;
-      args = [userId, userId, ...ids];
+        `WHERE p.user_id = ? AND p.reply_to IS NULL AND p.id IN (SELECT value FROM json_each(?)) ORDER BY datetime(p.created_at) DESC, p.id DESC`;
+      args = [userId, userId, JSON.stringify(ids)];
     } else if (req.query.before && req.query.beforeId) {
       sql = sql.slice(0, sql.indexOf('WHERE p.user_id = ?')) +
         `WHERE p.user_id = ? AND p.reply_to IS NULL
@@ -94,26 +94,23 @@ router.get('/', authenticate, async (req, res) => {
     let repliesMap = {};
     const audienceMap = await celebrityComments(userId, postIds, 2);
 
+    const replyRows = postIds.length ? (await db.execute({
+      sql: `SELECT * FROM (SELECT p.*,
+        CASE WHEN p.author_type='ai' THEN ac.name ELSE u.username END AS author_name,
+        CASE WHEN p.author_type='ai' THEN ac.username ELSE u.username END AS author_handle,
+        CASE WHEN p.author_type='ai' THEN ac.avatar_seed ELSE NULL END AS avatar_seed,
+        (SELECT COUNT(*) FROM likes WHERE post_id=p.id) AS like_count,
+        (SELECT COUNT(*) FROM likes WHERE post_id=p.id AND liker_id=?) AS user_liked,
+        ROW_NUMBER() OVER(PARTITION BY p.reply_to ORDER BY datetime(p.created_at) DESC,p.id DESC) AS preview_rank
+        FROM posts p LEFT JOIN ai_characters ac ON p.author_type='ai' AND p.author_id=ac.id
+        LEFT JOIN users u ON p.author_type='user' AND p.author_id=u.id
+        WHERE p.user_id=? AND p.reply_to IN (SELECT value FROM json_each(?))) WHERE preview_rank<=2`,
+      args:[userId,userId,JSON.stringify(postIds)],
+    })).rows : [];
     for (const pid of postIds) {
-      const replies = await db.execute({
-        sql: `SELECT p.*,
-                CASE WHEN p.author_type = 'ai' THEN ac.name    ELSE u.username END as author_name,
-                CASE WHEN p.author_type = 'ai' THEN ac.username ELSE u.username END as author_handle,
-                CASE WHEN p.author_type = 'ai' THEN ac.avatar_seed ELSE NULL END as avatar_seed,
-                (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-                (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND liker_id = ?) as user_liked
-              FROM posts p
-              LEFT JOIN ai_characters ac ON p.author_type = 'ai'  AND p.author_id = ac.id
-              LEFT JOIN users u          ON p.author_type = 'user' AND p.author_id = u.id
-              WHERE p.reply_to = ? AND p.user_id = ?
-              ORDER BY datetime(p.created_at) DESC, p.id DESC
-              LIMIT 2`,
-        args: [userId, pid, userId],
-      });
-      const combined = [...replies.rows, ...(audienceMap.get(pid) || [])]
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-        .slice(-2);
-      if (combined.length > 0) repliesMap[pid] = combined;
+      const combined=[...replyRows.filter(p=>p.reply_to===pid),...(audienceMap.get(pid)||[])]
+        .sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime()).slice(-2);
+      if (combined.length) repliesMap[pid]=combined;
     }
 
     const enriched = decoratedPosts.map(p => ({

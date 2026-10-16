@@ -1,4 +1,4 @@
-require('dotenv').config();
+if (process.env.SOLOVERSE_RUNTIME !== 'cloudflare') require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { db, initDB } = require('./src/db/schema');
@@ -37,7 +37,9 @@ app.use(cors({
 app.use(express.json({ limit: '32kb' }));
 
 app.use(async (_, __, next) => {
-  try { await db.execute('PRAGMA foreign_keys = ON'); } catch (_) {}
+  if (process.env.SOLOVERSE_RUNTIME !== 'cloudflare') {
+    try { await db.execute('PRAGMA foreign_keys = ON'); } catch (_) {}
+  }
   next();
 });
 

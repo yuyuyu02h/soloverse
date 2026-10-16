@@ -442,7 +442,7 @@ async function checkAbsenceReactions(userId) {
 // ─────────────────────────────────────────────────────────
 // バッチ: 全ユーザー処理
 // ─────────────────────────────────────────────────────────
-async function runAllUsers() {
+async function runAllUsers(only = null) {
   const users = await db.execute({ sql: `SELECT id FROM users WHERE onboarding_done = 1 AND ${activeGenerationSQL('users.id')}` });
 
   for (const user of users.rows) {
@@ -457,10 +457,10 @@ async function runAllUsers() {
       const configuredMinutes = Number(process.env.AUTONOMOUS_INTERVAL_MINUTES);
       const intervalMinutes = Number.isFinite(configuredMinutes) && configuredMinutes >= 5 ? configuredMinutes : 15;
       const jobs = [
-        ...(now - lastAuto > intervalMinutes * 60000 ? [() => runAutonomousTimeline(user.id)] : []),
-        ...(now - lastTrend > 5 * 60000 ? [() => runTrendGeneration(user.id)] : []),
-        () => runCharacterGrowth(user.id),
-        () => checkAbsenceReactions(user.id),
+        ...((!only || only === 'timeline') && now - lastAuto > intervalMinutes * 60000 ? [() => runAutonomousTimeline(user.id)] : []),
+        ...((!only || only === 'trends') && now - lastTrend > 5 * 60000 ? [() => runTrendGeneration(user.id)] : []),
+        ...(!only || only === 'growth' ? [() => runCharacterGrowth(user.id)] : []),
+        ...(!only || only === 'absence' ? [() => checkAbsenceReactions(user.id)] : []),
       ];
       for (const job of jobs) {
         if (!await isGenerationActive(user.id)) break;

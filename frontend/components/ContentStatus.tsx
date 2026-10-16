@@ -7,7 +7,7 @@ type Diagnostics = {
   content: { outcome: string; reason: string; count: number }[];
   pool: { state: string; count: number }[];
 };
-const reasons: Record<string, string> = { off_topic: '話題との関連が弱い', vague: '具体性が不足', semantic_duplicate: '似た投稿', persona_conflict: '人物設定との矛盾', roleplay: '作品のなりきり', length: '文字数', unknown_resident: '不明な住人', invalid_parent: '返信先が不正', daily_budget: '本日の利用枠を確保中', reply_priority: '返信を優先中', provider_quota: '提供元の枠の回復待ち', provider_unavailable: '生成サービス待ち', provider_cooldown: '生成サービスの一時休止', excess_candidate: '要求数を超えた候補', missing_parent_or_resident: '返信先・住人が見つからない', array_required: 'データ形式', meta_output: '説明文の混入' };
+const reasons: Record<string, string> = { off_topic: '話題との関連が弱い', vague: '具体性が不足', semantic_duplicate: '似た投稿', persona_conflict: '人物設定との矛盾', roleplay: '作品のなりきり', length: '文字数', unknown_resident: '不明な住人', invalid_parent: '返信先が不正', daily_budget: '本日の生成上限です。日本時間9時の枠更新をお待ちください', reply_priority: '返信を優先中', provider_quota: '提供元の枠の回復待ち', provider_unavailable: '生成サービス待ち', provider_cooldown: '生成サービスの一時休止', excess_candidate: '要求数を超えた候補', missing_parent_or_resident: '返信先・住人が見つからない', array_required: 'データ形式', meta_output: '説明文の混入' };
 Object.assign(reasons, { unverified_quote: '確認できない台詞の引用', unnatural_content: '表現や設定が不自然', unanswered_question: '質問への回答が不足', quality_review_wait: '投稿内容を確認中', self_reply: '同じ住人への自己返信' });
 export function ContentStatus() {
   const [data, setData] = useState<Diagnostics | null>(null);

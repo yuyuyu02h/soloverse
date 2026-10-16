@@ -1,0 +1,60 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "soloverse-api",
+  "main": "dist/worker.mjs",
+  "compatibility_date": "2026-10-16",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
+  "workers_dev": true,
+  "alias": {
+    "@libsql/client": "./no-local-db.cjs"
+  },
+  "vars": {
+    "SOLOVERSE_RUNTIME": "cloudflare",
+    "NODE_ENV": "production",
+    "CORS_ORIGIN": "https://soloverse-preview.pages.dev",
+    "APP_URL": "https://soloverse-preview.pages.dev",
+    "TRUST_PROXY": "true",
+    "REGISTRATION_CLOSED": "true",
+    "LLM_PROVIDER_ORDER": "groq",
+    "GROQ_MODELS": "openai/gpt-oss-120b",
+    "LLM_DAILY_REQUEST_BUDGET": "100",
+    "LLM_DAILY_TOKEN_BUDGET": "100000",
+    "GROQ_REQUEST_INTERVAL_MS": "12000",
+    "LLM_REQUEST_TIMEOUT_MS": "30000",
+    "LLM_TOTAL_TIMEOUT_MS": "60000",
+    "CONTENT_POOL_SIZE": "12",
+    "CONTENT_POOL_HOURS": "12",
+    "CONTENT_REFILL_ATTEMPTS": "1"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "soloverse-private",
+      "database_id": "9c6023db-ca6b-4b63-9665-6330db3d0514",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": false
+  },
+  "define": {
+    "process.env.SOLOVERSE_RUNTIME": "\"cloudflare\""
+  },
+  "build": {
+    "command": "node cloudflare/build-worker.cjs",
+    "watch_dir": [
+      "../backend",
+      "./worker.mjs",
+      "./build-worker.cjs"
+    ]
+  },
+  "no_bundle": true
+}

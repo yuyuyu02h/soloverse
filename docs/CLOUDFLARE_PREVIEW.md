@@ -1,3 +1,5 @@
+> 現在の完全版の構成は [CLOUDFLARE_FULL_APP.md](CLOUDFLARE_FULL_APP.md) を参照してください。以下は画面プレビューへ戻す場合の記録です。
+
 # Cloudflareの画面プレビュー公開
 
 今回は画面だけをCloudflare Pagesで公開します。トップ、3モードのオンボーディング、管理者ログインの見た目を確認できます。ログイン・新規登録・AI生成・DB・定期処理は公開範囲に含めません。公開版にプレビュー表示を付け、APIへの送信を停止しています。
@@ -20,7 +22,7 @@
 ```sh
 npm ci
 npm ci --prefix frontend
-npm run build:cloudflare
+npm run build:cloudflare:preview
 npm run preview:cloudflare
 ```
 

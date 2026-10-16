@@ -3,7 +3,8 @@ const { describeSettings } = require('./worldModes');
 function currentVersion(alias) {
   return `${alias}.theme_version=COALESCE((SELECT version FROM world_theme_state WHERE user_id=${alias}.user_id),1)`;
 }
-async function themeState(userId) {
+async function themeState(userId) { return db.memo(`theme:${userId}`, () => loadThemeState(userId)); }
+async function loadThemeState(userId) {
   await db.execute({ sql: `INSERT OR IGNORE INTO world_theme_state(user_id,theme,version,changed_at,position)
     SELECT user_id,interests,1,?,position FROM world_settings WHERE user_id=?`, args: [new Date().toISOString(), userId] });
   // Also protect against settings edited outside the normal theme-switch API.

@@ -1,0 +1,4 @@
+# Local-only testing. Copy to .dev.vars (ignored by Git). Never commit real values.
+JWT_SECRET=local-testing-only-use-a-random-secret-at-least-32-characters
+ADMIN_USER_IDS=cloudflare-local-owner
+# For AI testing, the user supplies GROQ_API_KEY manually. No key is needed for auth/DB tests.

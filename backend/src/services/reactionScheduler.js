@@ -166,7 +166,7 @@ async function processReactionQueue() {
           ORDER BY datetime(rq.scheduled_at) ASC LIMIT 20`,
   });
 
-  for (const item of pending.rows) {
+  for (const item of pending.rows.slice(0, process.env.SOLOVERSE_RUNTIME === 'cloudflare' ? 1 : undefined)) {
     if (!await isGenerationActive(item.user_id)) continue;
     try {
       if (item.reaction_type === 'like')  await processLike(item);

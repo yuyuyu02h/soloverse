@@ -2,12 +2,18 @@
   "name": "soloverse-deploy",
   "private": true,
   "scripts": {
-    "build:cloudflare": "node scripts/build-cloudflare.cjs",
+    "build:cloudflare": "node scripts/build-cloudflare.cjs --full",
     "preview:cloudflare": "wrangler pages dev frontend/out --port 8787",
-    "deploy:cloudflare": "npm run build:cloudflare && wrangler pages deploy frontend/out --project-name soloverse-preview"
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler pages deploy frontend/out --project-name soloverse-preview",
+    "build:cloudflare:preview": "node scripts/build-cloudflare.cjs",
+    "build:worker": "node cloudflare/build-worker.cjs",
+    "dev:worker": "wrangler dev --config cloudflare/wrangler.jsonc",
+    "deploy:worker": "wrangler deploy --config cloudflare/wrangler.jsonc",
+    "migrate:cloudflare": "wrangler d1 migrations apply DB --remote --config cloudflare/wrangler.jsonc"
   },
   "devDependencies": {
-    "wrangler": "^4.151.1"
+    "wrangler": "^4.151.1",
+    "esbuild": "0.28.2"
   },
   "version": "0.0.0"
 }

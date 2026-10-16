@@ -4,7 +4,7 @@ const { enabled, config } = require('./contentConfig');
 const { callLLM, buildWorldSystemPrompt, safeParseJSON } = require('./llm');
 const runtime = require('./llmRuntime');
 const { evaluate } = require('./contentQuality');
-const { residentContext } = require('./residentContext');
+const { residentContext, residentContexts } = require('./residentContext');
 const { serializeWorldTask } = require('./worldTasks');
 const { themeState, currentVersion } = require('./worldTheme');
 const { topicHints } = require('./topicPolicy');
@@ -36,11 +36,10 @@ async function fillPool(userId, { seed = false } = {}) {
   if (pending > 2) return 0;
   const w = await world(userId);
   if (!w.settings || !w.residents.length) return 0;
-  const contexts = new Map();
-  for (const char of w.residents) contexts.set(char.id, await residentContext(userId, char));
   // Rotate the prompt-sized cast so later-created residents are not permanently excluded.
   const castOffset = Math.floor(Date.now() / (cfg.horizonHours * 3600000)) % w.residents.length;
   const cast = [...w.residents.slice(castOffset), ...w.residents.slice(0, castOffset)].slice(0, 10);
+  const contexts = await residentContexts(userId, cast, settings);
   const target = cfg.poolSize - pending;
   const accepted = [];
   const start = Date.now();
@@ -95,7 +94,7 @@ ${JSON.stringify(w.recent.filter(p => !p.reply_to).slice(0, 6))}
     for (const [index, item] of rows.entries()) {
       await runtime.recordContent(userId, job, 'generated', 'candidate');
       if (index >= missing) { await runtime.recordContent(userId, job, 'rejected', 'excess_candidate'); continue; }
-      const char = w.residents.find(c => c.username === String(item?.username || '').replace(/^@/, ''));
+      const char = cast.find(c => c.username === String(item?.username || '').replace(/^@/, ''));
       if (!char) { await runtime.recordContent(userId, job, 'rejected', 'unknown_resident'); continue; }
       const existingParent = item.reply_to_id ? w.recent.find(p => p.id === item.reply_to_id && !p.reply_to && p.author_id !== char.id) : null;
       if (item.reply_to_id && (!existingParent || item.reply_to_index != null)) { await runtime.recordContent(userId, job, 'rejected', 'invalid_parent'); continue; }
@@ -141,7 +140,7 @@ ${JSON.stringify(w.recent.filter(p => !p.reply_to).slice(0, 6))}
   }
   if (accepted.length) {
     if ((await themeState(userId))?.theme_version !== settings.theme_version) return 0;
-    await db.batch(accepted.map(c => ({ sql: `INSERT INTO content_candidates(id,user_id,character_id,content,parent_id,source,scheduled_at,created_at,theme_version,reviewed) VALUES(?,?,?,?,?,'llm',?,?,?,?)`, args: [c.id, userId, c.char.id, c.content, c.parent_id, c.scheduled_at, new Date().toISOString(), settings.theme_version,cfg.review ? 1 : 0] })), 'write');
+    await db.batch(accepted.map(c => ({ sql: `INSERT INTO content_candidates(id,user_id,character_id,content,parent_id,source,scheduled_at,created_at,theme_version,reviewed) VALUES(?,?,?,?,?,?,?,?,?,?)`, args: [c.id, userId, c.char.id, c.content, c.parent_id, 'llm', c.scheduled_at, new Date().toISOString(), settings.theme_version,cfg.review ? 1 : 0] })), 'write');
   }
   if (accepted.length < target && cfg.templates) await ambientFallback(userId, w, contexts, job);
   return accepted.length;
@@ -161,6 +160,7 @@ async function ambientFallback(userId, w, contexts, job) {
     topic => `${topic}のメモを整理した。気になった理由も一緒に書いておくと後で思い出せる。`,
   ];
   for (const char of w.residents) {
+    if (!contexts.has(char.id)) continue;
     const topic = w.settings.interests;
     for (const template of templates) {
       const content = template(topic);
@@ -181,6 +181,7 @@ async function publishPool(userId) {
   if (!settings) return 0;
   await db.execute({ sql: "UPDATE content_candidates SET state='discarded' WHERE user_id=? AND state='pending' AND theme_version!=?", args: [userId, settings.theme_version] });
   const rows = (await db.execute({ sql: "SELECT * FROM content_candidates WHERE user_id=? AND state='pending' AND scheduled_at<=? ORDER BY scheduled_at,id LIMIT 8", args: [userId, new Date().toISOString()] })).rows;
+  if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') rows.splice(4);
   const unchecked = rows.filter(row=>!row.reviewed);
   if (unchecked.length && config().review) {
     try {
@@ -203,10 +204,12 @@ async function publishPool(userId) {
       return 0;
     }
   }
+  const residents = process.env.SOLOVERSE_RUNTIME === 'cloudflare' && rows.length ? (await db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id=? AND theme_version=?', args:[userId,settings.theme_version] })).rows : null;
+  const contexts = residents?.length ? await residentContexts(userId,residents,settings) : null;
   let count = 0;
   for (const row of rows) {
     if (row.state !== 'pending') continue;
-    const char = (await db.execute({ sql: 'SELECT * FROM ai_characters WHERE id=? AND user_id=? AND theme_version=?', args: [row.character_id, userId, settings.theme_version] })).rows[0];
+    const char = residents ? residents.find(c=>c.id===row.character_id) : (await db.execute({ sql: 'SELECT * FROM ai_characters WHERE id=? AND user_id=? AND theme_version=?', args: [row.character_id, userId, settings.theme_version] })).rows[0];
     const parent = row.parent_id ? (await db.execute({ sql: 'SELECT id,content FROM posts WHERE id=? AND user_id=? AND theme_version=?', args: [row.parent_id, userId, settings.theme_version] })).rows[0] : null;
     if (!char || (row.parent_id && !parent)) {
       const pendingParent = row.parent_id && (await db.execute({ sql: "SELECT id FROM content_candidates WHERE id=? AND user_id=? AND state='pending'", args: [row.parent_id, userId] })).rows.length;
@@ -215,7 +218,7 @@ async function publishPool(userId) {
       await runtime.recordContent(userId, 'publish', 'rejected', 'missing_parent_or_resident');
       continue;
     }
-    const assessment = evaluate(row.content, { settings, profile: (await residentContext(userId, char)).profile, target: parent?.content || '', semanticReview: Boolean(row.reviewed && row.source === 'llm') && config().review });
+    const assessment = evaluate(row.content, { settings, profile: (contexts?.get(char.id) || await residentContext(userId, char)).profile, target: parent?.content || '', semanticReview: Boolean(row.reviewed && row.source === 'llm') && config().review });
     if (!assessment.accepted) {
       await db.execute({ sql: "UPDATE content_candidates SET state='discarded' WHERE id=?", args: [row.id] });
       await runtime.recordContent(userId, 'publish', 'rejected', assessment.reason, assessment.scores);

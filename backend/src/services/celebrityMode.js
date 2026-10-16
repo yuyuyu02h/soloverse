@@ -252,11 +252,11 @@ async function decorateTimelinePosts(userId, posts, now = Date.now()) {
   if (!posts.length) return posts;
   const ids = posts.map(post => post.id);
   const scenes = await db.execute({
-    sql: `SELECT * FROM celebrity_scenes WHERE user_id=? AND post_id IN (${ids.map(() => '?').join(',')})`,
-    args: [userId, ...ids],
+    sql: `SELECT * FROM celebrity_scenes WHERE user_id=? AND post_id IN (SELECT value FROM json_each(?))`,
+    args: [userId, JSON.stringify(ids)],
   });
   const byPost = new Map(scenes.rows.map(scene => [scene.post_id, scene]));
-  const actual = (await db.execute({ sql: `SELECT scene_post_id,COUNT(*) n FROM celebrity_comments WHERE user_id=? AND scene_post_id IN (${ids.map(() => '?').join(',')}) AND datetime(created_at)<=datetime('now') GROUP BY scene_post_id`, args: [userId,...ids] })).rows;
+  const actual = (await db.execute({ sql: `SELECT scene_post_id,COUNT(*) n FROM celebrity_comments WHERE user_id=? AND scene_post_id IN (SELECT value FROM json_each(?)) AND datetime(created_at)<=datetime('now') GROUP BY scene_post_id`, args: [userId,JSON.stringify(ids)] })).rows;
   const visible = new Map(actual.map(row => [row.scene_post_id,Number(row.n)]));
   return posts.map(post => {
     const scene = byPost.get(post.id);
@@ -299,10 +299,10 @@ async function celebrityComments(userId, postIds, perPost = 8) {
   if (!postIds.length) return new Map();
   const rows = await db.execute({
     sql: `SELECT * FROM celebrity_comments
-          WHERE user_id=? AND scene_post_id IN (${postIds.map(() => '?').join(',')})
+          WHERE user_id=? AND scene_post_id IN (SELECT value FROM json_each(?))
             AND datetime(created_at)<=datetime('now')
           ORDER BY datetime(created_at) ASC,id ASC`,
-    args: [userId, ...postIds],
+    args: [userId, JSON.stringify(postIds)],
   });
   const result = new Map();
   for (const row of rows.rows) {

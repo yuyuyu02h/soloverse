@@ -1,5 +1,5 @@
 const express = require('express');
-const bcrypt = require('bcryptjs');
+const { hashPassword, verifyPassword } = require('../services/passwords');
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { authMiddleware, generateToken } = require('../middleware/auth');
@@ -13,7 +13,14 @@ const loginAttempts = new Map(); // key: IP, value: { count, resetAt }
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15分
 const RATE_LIMIT_MAX = 10; // 15分に10回まで
 
-function checkRateLimit(ip) {
+async function checkRateLimit(ip) {
+  if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') {
+    const { createHash } = require('node:crypto');
+    const key = createHash('sha256').update(String(ip)).digest('hex');
+    const now = Date.now();
+    const result = await db.execute({ sql: `INSERT INTO login_rate_limits(key,count,reset_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN reset_at<=? THEN 1 ELSE count+1 END,reset_at=CASE WHEN reset_at<=? THEN excluded.reset_at ELSE reset_at END RETURNING count`, args: [key, now+RATE_LIMIT_WINDOW,now,now] });
+    return result.rows[0].count <= RATE_LIMIT_MAX;
+  }
   const now = Date.now();
   const record = loginAttempts.get(ip);
   if (!record || now > record.resetAt) {
@@ -27,8 +34,9 @@ function checkRateLimit(ip) {
 
 // 新規登録
 router.post('/register', async (req, res) => {
+  if (process.env.REGISTRATION_CLOSED === 'true') return res.status(403).json({ error: 'このサイトは個人利用専用です。新規登録は受け付けていません。' });
   const ip = req.ip || req.connection.remoteAddress;
-  if (!checkRateLimit(ip)) {
+  if (!await checkRateLimit(ip)) {
     return res.status(429).json({ error: 'リクエストが多すぎます。15分後に再試行してください。' });
   }
 
@@ -54,7 +62,7 @@ router.post('/register', async (req, res) => {
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'このメールアドレスは既に使用されています' });
     }
-    const hash = await bcrypt.hash(password, 10);
+    const hash = await hashPassword(password);
     const id = uuidv4();
     await db.execute({
       sql: 'INSERT INTO users (id, email, password_hash, username) VALUES (?, ?, ?, ?)',
@@ -72,7 +80,7 @@ router.post('/register', async (req, res) => {
 // ログイン
 async function login(req, res, adminLogin = false) {
   const ip = req.ip || req.connection.remoteAddress;
-  if (!checkRateLimit(ip)) {
+  if (!await checkRateLimit(ip)) {
     return res.status(429).json({ error: 'リクエストが多すぎます。15分後に再試行してください。' });
   }
 
@@ -90,9 +98,10 @@ async function login(req, res, adminLogin = false) {
     const user = result.rows[0];
     if (!user) return res.status(401).json({ error: 'メールアドレスまたはパスワードが違います' });
 
-    const valid = await bcrypt.compare(password, user.password_hash);
+    const valid = await verifyPassword(password, user.password_hash, req.body.passwordFormat);
     if (!valid) return res.status(401).json({ error: 'メールアドレスまたはパスワードが違います' });
 
+    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare' && !isAdminUser(user.id)) return res.status(403).json({ error: 'このサイトは個人利用専用です' });
     if (adminLogin && !isAdminUser(user.id)) return res.status(403).json({ error: '管理者として許可されたアカウントを使用してください' });
     const token = generateToken(user.id, adminLogin ? 'admin' : 'user');
     if (!adminLogin) await touchSession(user.id, sessionId(token));

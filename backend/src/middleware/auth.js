@@ -5,11 +5,11 @@ const { sessionId, isSessionRevoked, touchSession } = require('../services/gener
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const KNOWN_WEAK_SECRETS = new Set(['change-me', 'soloverse-change-this-in-production']);
-if (!JWT_SECRET || KNOWN_WEAK_SECRETS.has(JWT_SECRET)) {
+if (process.env.SOLOVERSE_RUNTIME !== 'cloudflare' && (!JWT_SECRET || KNOWN_WEAK_SECRETS.has(JWT_SECRET))) {
   console.error('[FATAL] JWT_SECRET is not set. Set it in your .env file.');
   process.exit(1);
 }
-if (process.env.NODE_ENV === 'production' && JWT_SECRET.length < 32) {
+if (process.env.SOLOVERSE_RUNTIME !== 'cloudflare' && process.env.NODE_ENV === 'production' && JWT_SECRET.length < 32) {
   console.error('[FATAL] JWT_SECRET must be at least 32 characters in production.');
   process.exit(1);
 }
@@ -35,6 +35,7 @@ async function authMiddleware(req, res, next) {
     return res.status(401).json({ error: '認証が必要です', code: 'NO_TOKEN' });
   }
   try {
+    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare' && (!JWT_SECRET || JWT_SECRET.length < 32)) throw new Error('JWT not configured');
     const token = auth.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
 
@@ -46,6 +47,9 @@ async function authMiddleware(req, res, next) {
       return res.status(401).json({ error: 'セッションが無効です。再度ログインしてください', code: 'USER_NOT_FOUND' });
     }
 
+    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare' && !String(process.env.ADMIN_USER_IDS || '').split(',').includes(decoded.userId)) {
+      return res.status(403).json({ error: 'このサイトは個人利用専用です' });
+    }
     req.userId = decoded.userId;
     req.tokenScope = decoded.scope || 'user';
     req.sessionId = sessionId(token);

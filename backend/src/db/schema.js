@@ -1,13 +1,4 @@
-const { createClient } = require('@libsql/client');
-const path = require('path');
-
-const databasePath = process.env.DB_PATH
-  ? path.resolve(process.env.DB_PATH)
-  : path.join(__dirname, '../../soloverse.db');
-
-const db = createClient({
-  url: `file:${databasePath}`
-});
+const { db, databasePath } = require('./client');
 
 async function initDB() {
   await db.execute('PRAGMA foreign_keys = ON');

@@ -254,4 +254,8 @@ npm --prefix frontend run typecheck
 
 ## Cloudflareの画面プレビュー
 
-画面のみを公開する設定を追加しました。`npm run build:cloudflare`で静的ファイルを出力し、Cloudflareでは`frontend/out`だけを公開します。公開版はログイン・AI生成を停止し、3モードの設定画面を確認できます。管理者情報・DB・APIキーは公開物に含めません。GitHub連携のブランチ・ビルドコマンド・手元での確認方法は[公開手順](docs/CLOUDFLARE_PREVIEW.md)を参照してください。
+画面のみを公開する設定を追加しました。`npm run build:cloudflare:preview`で静的ファイルを出力し、Cloudflareでは`frontend/out`だけを公開します。公開版はログイン・AI生成を停止し、3モードの設定画面を確認できます。管理者情報・DB・APIキーは公開物に含めません。GitHub連携のブランチ・ビルドコマンド・手元での確認方法は[公開手順](docs/CLOUDFLARE_PREVIEW.md)を参照してください。
+
+## Cloudflareの個人利用版
+
+API・DB・定期処理を含む構成と、ユーザーが行うAIキー登録は[完全版の公開手順](docs/CLOUDFLARE_FULL_APP.md)を参照してください。公開版は新規登録を停止し、許可した管理者アカウントだけで利用します。通常のローカル開発は従来のSQLite・bcryptのままです。

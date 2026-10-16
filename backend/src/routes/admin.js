@@ -2,7 +2,7 @@ const express = require('express');
 const { db } = require('../db/schema');
 const { adminMiddleware } = require('../middleware/admin');
 const { resolveMode, LABELS } = require('../services/worldModes');
-const { isLLMConfigured } = require('../services/llm');
+const { isLLMConfigured, callLLM } = require('../services/llm');
 
 const router = express.Router();
 router.use(adminMiddleware);
@@ -27,5 +27,17 @@ router.get('/overview', async (req, res) => {
     console.error('Admin overview error:', error.message);
     res.status(500).json({ error: '管理情報を取得できませんでした' });
   }
+});
+// Fixed fictional prompt: test a newly registered key without creating a world
+// or sending the owner's profile/posts to an AI provider.
+router.post('/ai-check', async (req, res) => {
+  if (!isLLMConfigured()) return res.status(503).json({ error: 'AI APIキーが未設定です' });
+  try {
+    let metadata;
+    const text = await callLLM('これは架空データによる接続確認です。', '接続確認OK、とだけ返してください。', 64,
+      { job:'admin_connection_check',priority:'interactive',expectJSON:false,onResult:value=>{metadata=value;} });
+    if (!text.trim()) throw new Error('empty');
+    res.json({ success:true,provider:metadata?.provider,model:metadata?.model });
+  } catch (_) { res.status(503).json({ error: 'AIに接続できませんでした。無料枠・キーの設定を確認し、時間をおいて再試行してください。' }); }
 });
 module.exports = router;
