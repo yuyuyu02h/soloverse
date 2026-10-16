@@ -55,3 +55,39 @@ test('Cloudflare lock contention is typed, cannot steal an active lease, and exp
  },{waitUntil(){}});
  assert.equal((await client.execute('SELECT COUNT(*) n FROM deployment_locks')).rows[0].n,0);
 });
+
+test('Cloudflare posting returns a retryable conflict during a world update, then saves the post after release',async()=>{
+ const http=require('node:http');
+ const {app}=require('../server');
+ const {generateToken}=require('../src/middleware/auth');
+ let completed;
+ const server=http.createServer((req,res)=>{
+  trace=[];network=0;
+  const pending=[];
+  completed=withDatabase(binding,async()=>{
+   await new Promise(resolve=>{res.once('finish',resolve);app(req,res);});
+   await Promise.all(pending);
+  },{waitUntil(promise){pending.push(promise);}});
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const url=`http://127.0.0.1:${server.address().port}/api/timeline/post`;
+ const token=generateToken('owner');
+ const send=async()=>{
+  const response=await originalFetch(url,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify({content:'撮影が終わりました。今日は静かな場面の演技に集中できました。'})});
+  const data=await response.json(); await completed;
+  assert.ok(trace.length+network<=45);
+  return {status:response.status,data};
+ };
+ try {
+  await client.execute({sql:'INSERT INTO deployment_locks VALUES(?,?,?)',args:['world:owner','held-by-another-worker',Date.now()+180000]});
+  const waiting=await send();
+  assert.equal(waiting.status,409);assert.equal(waiting.data.code,'WORLD_BUSY');
+  assert.equal((await client.execute("SELECT COUNT(*) n FROM posts WHERE author_type='user'")).rows[0].n,0);
+  await client.execute('UPDATE deployment_locks SET expires_at=0');
+  const posted=await send();
+  assert.equal(posted.status,200);assert.equal(posted.data.success,true);
+  assert.equal((await client.execute("SELECT COUNT(*) n FROM posts WHERE author_type='user'")).rows[0].n,1);
+  assert.equal((await client.execute('SELECT COUNT(*) n FROM celebrity_scenes')).rows[0].n,1);
+  assert.equal((await client.execute('SELECT COUNT(*) n FROM deployment_locks')).rows[0].n,0);
+ }finally{await new Promise(resolve=>server.close(resolve));}
+});
