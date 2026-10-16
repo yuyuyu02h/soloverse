@@ -22,6 +22,8 @@ export default function TimelinePage() {
   const [postError, setPostError] = useState('');
   const [postNotice, setPostNotice] = useState('');
   const [timelineError, setTimelineError] = useState('');
+  const [seedWait, setSeedWait] = useState<{ retryAt?: string } | null>(null);
+  const [retryReady, setRetryReady] = useState(true);
 
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
@@ -78,6 +80,14 @@ export default function TimelinePage() {
     };
   }, []);
 
+  useEffect(() => {
+    const delay = seedWait?.retryAt ? Date.parse(seedWait.retryAt) - Date.now() : 0;
+    setRetryReady(!(delay > 0));
+    if (!(delay > 0)) return;
+    const timer = setTimeout(() => setRetryReady(true), Math.min(delay, 2147483647));
+    return () => clearTimeout(timer);
+  }, [seedWait]);
+
   const initTimeline = async () => {
     const epoch = ++epochRef.current;
     latestCreatedAt.current = null;
@@ -85,10 +95,17 @@ export default function TimelinePage() {
     setPosts([]);
     setLoading(true);
     setTimelineError('');
+    setSeedWait(null);
     try {
       setSeeding(true);
       let seedError = '';
-      try { await api.post('/api/timeline/seed', {}); }
+      try {
+        const seed = await api.post('/api/timeline/seed', {});
+        if (seed.status === 'waiting') {
+          seedError = seed.message;
+          setSeedWait({ retryAt: seed.retryAt });
+        }
+      }
       catch (e) { seedError = e instanceof Error ? e.message : 'AIの投稿を準備できませんでした'; }
       setSeeding(false);
 
@@ -386,8 +403,10 @@ export default function TimelinePage() {
         </div>
 
         {/* ローディング */}
-        {timelineError && <div role="alert" style={{ padding: 16, color: '#ef9999' }}>
-          {timelineError} <button onClick={initTimeline} disabled={loading}>再試行</button>
+        {timelineError && <div role={seedWait ? 'status' : 'alert'} style={{ padding: 16, color: seedWait ? '#a89bd9' : '#ef9999' }}>
+          {timelineError}
+          {seedWait?.retryAt && <p style={{ fontSize: 13 }}>再試行の目安：{new Date(seedWait.retryAt).toLocaleTimeString('ja-JP')}</p>}
+          <button onClick={initTimeline} disabled={loading || (Boolean(seedWait) && !retryReady)}>{seedWait && !retryReady ? '再試行までお待ちください' : '再試行'}</button>
         </div>}
         {loading && (
           <div style={{ padding: 48, textAlign: 'center', color: '#71767b' }}>

@@ -22,6 +22,14 @@ async function world(userId) {
   return { settings, residents: residents.rows, recent: recent.rows, history: [...recent.rows, ...pending.rows].map(p => p.content) };
 }
 
+
+async function deferPool(userId, settings, error, fallback = 'provider_unavailable') {
+  const reason = error.code === 'LLM_DEFERRED' ? error.message : fallback;
+  const retryAt = error.retryAt || new Date(Date.now() + 60000).toISOString();
+  await db.execute({ sql: 'UPDATE content_pool_state SET next_fill_at=?,defer_reason=? WHERE user_id=? AND theme_version=?', args: [retryAt, reason, userId, settings.theme_version] });
+  return reason;
+}
+
 // Caller holds the existing per-world lock. Each refilling pass is strictly bounded.
 async function fillPool(userId, { seed = false } = {}) {
   if (!enabled()) return 0;
@@ -38,15 +46,15 @@ async function fillPool(userId, { seed = false } = {}) {
   if (!w.settings || !w.residents.length) return 0;
   // Rotate the prompt-sized cast so later-created residents are not permanently excluded.
   const castOffset = Math.floor(Date.now() / (cfg.horizonHours * 3600000)) % w.residents.length;
-  const cast = [...w.residents.slice(castOffset), ...w.residents.slice(0, castOffset)].slice(0, 10);
+  const cast = [...w.residents.slice(castOffset), ...w.residents.slice(0, castOffset)].slice(0, seed ? 4 : 10);
   const contexts = await residentContexts(userId, cast, settings);
-  const target = cfg.poolSize - pending;
+  const target = (seed ? Math.min(4, cfg.poolSize) : cfg.poolSize) - pending;
   const accepted = [];
   const start = Date.now();
   const maxDue = (await db.execute({ sql: `SELECT MAX(scheduled_at) AS due FROM content_candidates c WHERE user_id=? AND ${currentVersion('c')} AND state='pending'`, args: [userId] })).rows[0].due;
   const begin = Math.max(start, Date.parse(maxDue || '') + 60000 || start);
   // Persist retry pacing even when every model is unavailable or every candidate is rejected.
-  await db.execute({ sql: `INSERT INTO content_pool_state(user_id,next_fill_at,theme_version) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET next_fill_at=excluded.next_fill_at,theme_version=excluded.theme_version`, args: [userId, new Date(start + 30 * 60000).toISOString(), settings.theme_version] });
+  await db.execute({ sql: `INSERT INTO content_pool_state(user_id,next_fill_at,theme_version) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET next_fill_at=excluded.next_fill_at,theme_version=excluded.theme_version,defer_reason=''`, args: [userId, new Date(start + 30 * 60000).toISOString(), settings.theme_version] });
   for (let pass = 0; pass < cfg.refillAttempts && accepted.length < target; pass++) {
     const missing = target - accepted.length;
     let resultMeta;
@@ -65,7 +73,7 @@ async function fillPool(userId, { seed = false } = {}) {
           : `世界のテーマ・界隈は「${settings.interests}」。個人の無関係な趣味だけでは投稿しない。関連語の例: ${topicHints(settings.interests)}。用語を毎回詰め込まず、返信は親の文脈を引き継ぐ`,
       ]), `日常投稿を${missing}件だけ生成してください（不足分の補充${pass + 1}回目）。各本文は20〜100字。
 住人と構造化プロフィール・短期記憶:
-${JSON.stringify(cast.map(c => ({ username: c.username, profile: contexts.get(c.id).profile, memory: contexts.get(c.id).memory.slice(0, 2).map(s => s.slice(0, 80)) })))}
+${JSON.stringify(cast.map(c => ({ username: c.username, profile: (({ fingerprint, ...profile }) => profile)(contexts.get(c.id).profile), memory: contexts.get(c.id).memory.slice(0, 2).map(s => s.slice(0, 80)) })))}
 直近と今回採用済みの内容（繰り返さない）:
 ${JSON.stringify([...w.history.slice(0, 10), ...accepted.map(a => a.content)].slice(-30))}
 JSON配列のみ: [{"username":"住人のusername","content":"具体的な投稿","reply_to_index":null}]
@@ -80,7 +88,8 @@ ${JSON.stringify(w.recent.filter(p => !p.reply_to).slice(0, 6))}
         await db.execute({ sql: 'UPDATE content_pool_state SET next_fill_at=? WHERE user_id=? AND theme_version=?', args: [new Date().toISOString(), userId, settings.theme_version] });
         return 0;
       }
-      await runtime.recordContent(userId, job, 'deferred', error.code === 'LLM_DEFERRED' ? error.message : 'provider_unavailable');
+      const reason = await deferPool(userId, settings, error);
+      await runtime.recordContent(userId, job, 'deferred', reason);
       break;
     }
     const rows = safeParseJSON(raw);
@@ -115,6 +124,8 @@ ${JSON.stringify(w.recent.filter(p => !p.reply_to).slice(0, 6))}
     }
     if (!addedThisPass && resultMeta?.attemptId) await db.execute({ sql: "UPDATE llm_attempts SET outcome='quality_rejected' WHERE id=?", args: [resultMeta.attemptId] });
   }
+  let reviewed = false;
+  let reviewDeferred = false;
   if (accepted.length && cfg.review) {
     try {
       const verdicts = await reviewBatch(userId, w.settings, accepted.map(c => ({ content:c.content,parent:accepted.find(p=>p.id===c.parent_id)?.content || w.recent.find(p=>p.id===c.parent_id)?.content })), { priority:seed ? 'interactive' : 'background' });
@@ -128,22 +139,28 @@ ${JSON.stringify(w.recent.filter(p => !p.reply_to).slice(0, 6))}
         if (ok) { kept.add(candidate.id); approved.push(candidate); }
       }
       accepted.splice(0,accepted.length,...approved);
+      reviewed = true;
     } catch (error) {
       if (error.code === 'LLM_DEFERRED' && error.message === 'user_inactive') {
         await db.execute({ sql: 'UPDATE content_pool_state SET next_fill_at=? WHERE user_id=? AND theme_version=?', args: [new Date().toISOString(), userId, settings.theme_version] });
         return 0;
       }
-      await runtime.recordContent(userId,job,'deferred',error.code === 'LLM_DEFERRED' ? error.message : 'quality_review_wait');
-      if (cfg.templates) await ambientFallback(userId,w,contexts,job);
-      return 0;
+      const reason = await deferPool(userId, settings, error, 'quality_review_wait');
+      await runtime.recordContent(userId,job,'deferred',reason);
+      if (!['provider_quota','provider_cooldown','daily_budget'].includes(reason)) {
+        if (cfg.templates) await ambientFallback(userId,w,contexts,job);
+        return 0;
+      }
+      reviewDeferred = true;
+      // Keep unreviewed candidates; publication will review them after quota recovers.
     }
   }
   if (accepted.length) {
     if ((await themeState(userId))?.theme_version !== settings.theme_version) return 0;
-    await db.batch(accepted.map(c => ({ sql: `INSERT INTO content_candidates(id,user_id,character_id,content,parent_id,source,scheduled_at,created_at,theme_version,reviewed) VALUES(?,?,?,?,?,?,?,?,?,?)`, args: [c.id, userId, c.char.id, c.content, c.parent_id, 'llm', c.scheduled_at, new Date().toISOString(), settings.theme_version,cfg.review ? 1 : 0] })), 'write');
+    await db.batch(accepted.map(c => ({ sql: `INSERT INTO content_candidates(id,user_id,character_id,content,parent_id,source,scheduled_at,created_at,theme_version,reviewed) VALUES(?,?,?,?,?,?,?,?,?,?)`, args: [c.id, userId, c.char.id, c.content, c.parent_id, 'llm', c.scheduled_at, new Date().toISOString(), settings.theme_version,reviewed ? 1 : 0] })), 'write');
   }
   if (accepted.length < target && cfg.templates) await ambientFallback(userId, w, contexts, job);
-  return accepted.length;
+  return reviewDeferred ? 0 : accepted.length;
 }
 
 async function ambientFallback(userId, w, contexts, job) {
@@ -200,7 +217,8 @@ async function publishPool(userId) {
         }
       }
     } catch (error) {
-      await runtime.recordContent(userId,'publish','deferred',error.code === 'LLM_DEFERRED' ? error.message : 'quality_review_wait');
+      const reason = await deferPool(userId, settings, error, 'quality_review_wait');
+      await runtime.recordContent(userId,'publish','deferred',reason);
       return 0;
     }
   }
@@ -244,7 +262,10 @@ async function seedEnhanced(userId) {
   if (exists.rows.length) return 0;
   await fillPool(userId, { seed: true });
   const count = await publishPool(userId);
-  if (!count) throw new Error('初期投稿は準備中です。時間をおいて再試行してください');
+  if (!count) {
+    const state = (await db.execute({ sql: 'SELECT next_fill_at,defer_reason FROM content_pool_state WHERE user_id=?', args: [userId] })).rows[0];
+    throw new runtime.DeferredError(state?.defer_reason || 'initial_posts_wait', state?.next_fill_at);
+  }
   return count;
 }
 

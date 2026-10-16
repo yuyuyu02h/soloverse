@@ -265,3 +265,19 @@ test('incomplete review never silently approves candidates, and old pending cont
   assert.equal(await publishPool('owner'),0);
   assert.equal((await db.execute("SELECT state FROM content_candidates WHERE id='legacy-pending'")).rows[0].state,'discarded');
 });
+
+test('celebrity mode switch followed by seed quota wait returns 202 with recovery time and keeps old history', async () => {
+  await post('previous-world','owner0',starPosts[0]);
+  const switched=await api('/api/onboarding/theme',{body:{mode:'celebrity',celebrityRole:'映画俳優'}});
+  assert.equal(switched.status,200);
+  const resetAt=Date.now()+20000;
+  await db.execute({sql:'INSERT INTO llm_provider_limits(provider,model,remaining_requests,remaining_tokens,reset_tokens_at,observed_at) VALUES(?,?,?,?,?,?) ON CONFLICT(provider,model) DO UPDATE SET remaining_tokens=excluded.remaining_tokens,reset_tokens_at=excluded.reset_tokens_at',args:['groq',process.env.GROQ_MODELS,100,0,resetAt,new Date().toISOString()]});
+  const before=calls.length;
+  const seed=await api('/api/timeline/seed',{body:{}});
+  assert.equal(seed.status,202); assert.equal(seed.data.status,'waiting'); assert.equal(seed.data.reason,'provider_quota');
+  assert.equal(Date.parse(seed.data.retryAt),resetAt+1000); assert.ok(seed.data.message.includes('利用枠'));
+  assert.equal(calls.length,before);
+  const world=await api('/api/onboarding/world');
+  assert.equal(world.data.settings.mode,'celebrity'); assert.equal(world.data.characters.length,10);
+  assert.equal((await db.execute("SELECT COUNT(*) n FROM posts WHERE id='previous-world'")).rows[0].n,1);
+});

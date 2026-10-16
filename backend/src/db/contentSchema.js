@@ -18,6 +18,7 @@ async function initContentSchema(db) {
     if (!columns.some(c => c.name === 'theme_version')) await db.execute(`ALTER TABLE ${table} ADD COLUMN theme_version INTEGER NOT NULL DEFAULT 1`);
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_${table}_theme ON ${table}(user_id,theme_version)`);
   }
+  if (!(await db.execute('PRAGMA table_info(content_pool_state)')).rows.some(c => c.name === 'defer_reason')) await db.execute("ALTER TABLE content_pool_state ADD COLUMN defer_reason TEXT NOT NULL DEFAULT ''");
   if (!(await db.execute('PRAGMA table_info(content_candidates)')).rows.some(c => c.name === 'reviewed')) await db.execute('ALTER TABLE content_candidates ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0');
   if (!(await db.execute('PRAGMA table_info(ai_characters)')).rows.some(c => c.name === 'participation_role')) await db.execute("ALTER TABLE ai_characters ADD COLUMN participation_role TEXT NOT NULL DEFAULT ''");
   if (!(await db.execute('PRAGMA table_info(world_theme_state)')).rows.some(c => c.name === 'position')) await db.execute("ALTER TABLE world_theme_state ADD COLUMN position TEXT NOT NULL DEFAULT ''");

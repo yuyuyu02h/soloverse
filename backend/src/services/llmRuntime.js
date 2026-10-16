@@ -7,7 +7,11 @@ let active = false;
 const waiting = [];
 function attachDatabase(client) { db = client; }
 class DeferredError extends Error {
-  constructor(reason) { super(reason); this.code = 'LLM_DEFERRED'; }
+  constructor(reason, retryAt) {
+    super(reason); this.code = 'LLM_DEFERRED';
+    const nextDay = Math.floor(Date.now() / 86400000) * 86400000 + 86400000;
+    this.retryAt = new Date(retryAt || (reason === 'daily_budget' ? nextDay : Date.now() + 60000)).toISOString();
+  }
 }
 function schedule(options, task) {
   if (!enabled()) return task();
@@ -41,10 +45,11 @@ async function beforeAttempt(target, options, estimatedTokens) {
   const latest = (await db.execute({
     sql: 'SELECT * FROM llm_provider_limits WHERE provider=? AND model=?', args: [target.providerName, target.model],
   })).rows[0];
-  if (latest && ((latest.remaining_requests === 0 && latest.reset_requests_at > Date.now())
-    || (latest.remaining_tokens != null && latest.remaining_tokens < estimatedTokens && latest.reset_tokens_at > Date.now()))) {
-    throw new DeferredError('provider_quota');
-  }
+  const resets = latest ? [
+    latest.remaining_requests === 0 && latest.reset_requests_at,
+    latest.remaining_tokens != null && latest.remaining_tokens < estimatedTokens && latest.reset_tokens_at,
+  ].filter(time => time > Date.now()) : [];
+  if (resets.length) throw new DeferredError('provider_quota', Math.max(...resets) + 1000);
   const id = randomUUID();
   const reserved = await db.execute({ sql: `INSERT INTO llm_attempts(id,user_id,job,priority,provider,model,outcome,tokens,estimated,created_at)
     SELECT ?,?,?,?,?,?,'running',?,1,? WHERE

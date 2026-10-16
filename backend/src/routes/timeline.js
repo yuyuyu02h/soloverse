@@ -346,6 +346,17 @@ router.post('/seed', authenticate, async (req, res) => {
     await generateAITimelinePosts(userId);
     res.json({ success: true });
   } catch (e) {
+    if (e.code === 'LLM_DEFERRED') {
+      const messages = {
+        provider_quota: 'AI提供元の利用枠が回復するのを待っています。選んだモードと設定は保存されています。',
+        provider_cooldown: 'AI提供元が一時休止中です。少し待って再試行してください。',
+        daily_budget: '本日のAI生成上限に達しました。日本時間9時の枠更新をお待ちください。',
+        quality_review_wait: '初期投稿の内容を確認中です。少し待って再試行してください。',
+        user_inactive: '画面を開いた状態で再試行してください。',
+        provider_unavailable: 'AI提供元に接続できませんでした。少し待って再試行してください。',
+      };
+      return res.status(202).json({ status: 'waiting', reason: e.message, message: messages[e.message] || '初期投稿を準備中です。時間をおいて再試行してください。', retryAt: e.retryAt });
+    }
     console.error('Seed error:', e);
     res.status(500).json({
       error: 'シード生成に失敗しました',

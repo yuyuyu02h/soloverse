@@ -251,3 +251,47 @@ test('concurrent seed uses one pool; clearing world cascades profile/memory/cand
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM resident_profiles WHERE user_id='owner'")).rows[0].n, 0);
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM content_candidates WHERE user_id='owner'")).rows[0].n, 0);
 });
+
+
+test('celebrity seed reports quota waiting and retries at provider reset instead of waiting thirty minutes', async () => {
+  await db.execute("UPDATE world_settings SET position='admired' WHERE user_id='owner'");
+  const resetAt = Date.now() + 20000;
+  await db.execute({sql:'INSERT INTO llm_provider_limits(provider,model,remaining_requests,remaining_tokens,reset_tokens_at,observed_at) VALUES(?,?,?,?,?,?)',args:['groq',process.env.GROQ_MODELS,100,0,resetAt,new Date().toISOString()]});
+  await assert.rejects(seedEnhanced('owner'), error => error.code==='LLM_DEFERRED' && error.message==='provider_quota' && Date.parse(error.retryAt)===resetAt+1000);
+  assert.equal(requests.length,0);
+  const state=(await db.execute("SELECT * FROM content_pool_state WHERE user_id='owner'")).rows[0];
+  assert.equal(state.defer_reason,'provider_quota');
+  assert.equal(Date.parse(state.next_fill_at),resetAt+1000);
+  await assert.rejects(seedEnhanced('owner'), error => error.message==='provider_quota');
+  assert.equal(requests.length,0);
+  await db.execute("UPDATE llm_provider_limits SET reset_tokens_at=0");
+  await db.execute("UPDATE content_pool_state SET next_fill_at='2000-01-01'");
+  assert.ok(await seedEnhanced('owner')>0);
+  assert.equal(requests.length,1);
+  assert.equal((await db.execute("SELECT COUNT(*) n FROM posts WHERE user_id='owner' AND author_type='ai'")).rows[0].n,4);
+});
+
+test('initial seed is small and omits internal profile fingerprints from prompts', async () => {
+  process.env.CONTENT_POOL_SIZE='12';
+  try {
+    assert.ok(await seedEnhanced('owner')>0);
+    const prompt=requests[0].messages.at(-1).content;
+    assert.ok(prompt.includes('日常投稿を4件だけ'));
+    assert.ok(!prompt.includes('fingerprint'));
+  } finally { process.env.CONTENT_POOL_SIZE='4'; }
+});
+
+test('review quota waiting preserves unreviewed stock and does not publish it until reviewed', async () => {
+  process.env.CONTENT_REVIEW='true';
+  responses=[{content:candidates(),headers:{'x-ratelimit-remaining-tokens':'0','x-ratelimit-reset-tokens':'20s'}}];
+  try {
+    await assert.rejects(seedEnhanced('owner'), error=>error.code==='LLM_DEFERRED' && error.message==='provider_quota');
+    assert.equal(requests.length,1);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM content_candidates WHERE user_id='owner' AND reviewed=0 AND state='pending'")).rows[0].n,4);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM posts WHERE user_id='owner'")).rows[0].n,0);
+    await db.execute('UPDATE llm_provider_limits SET reset_tokens_at=0');
+    responses=[{content:[0,1,2,3].map(index=>({index,accepted:true,reason:'accepted'}))}];
+    assert.equal(await seedEnhanced('owner'),4);
+    assert.equal(requests.length,2);
+  } finally { process.env.CONTENT_REVIEW='false'; }
+});
