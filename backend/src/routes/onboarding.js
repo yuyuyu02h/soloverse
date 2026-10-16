@@ -33,6 +33,9 @@ router.post('/submit', authenticate, async (req, res) => {
 
   try {
     await serializeWorldTask(userId, async () => {
+      if (await require('../services/generationActivity').isSessionRevoked(req.sessionId)) {
+        return res.status(401).json({ error: 'ログアウト済みです。再度ログインしてください', code: 'SESSION_REVOKED' });
+      }
       await themeState(req.userId);
       // ユーザーが実際に存在するか確認（外部キー制約エラーを防ぐ）
       const userResult = await db.execute({

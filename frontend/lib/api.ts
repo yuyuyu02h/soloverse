@@ -16,7 +16,14 @@ export function clearToken() {
   window.dispatchEvent(new Event('sv-auth-change'));
 }
 
-export async function logout() {
+export async function logout(options: { resetDemo?: boolean } = {}) {
+  if (options.resetDemo) {
+    // 初期化に失敗した場合はログインを維持し、やり直せるようにする。
+    await api.post('/api/auth/logout', { confirmDemoReset: true });
+    clearToken();
+    clearUser();
+    return;
+  }
   const token = getToken();
   clearToken();
   clearUser();

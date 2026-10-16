@@ -13,10 +13,12 @@ import { SCREEN_PREVIEW } from '../../lib/deployment';
 
 export default function TimelinePage() {
   const router = useRouter();
-  const [user, setUser] = useState<{ userId: string; username: string } | null>(null);
+  const [user, setUser] = useState<{ userId: string; username: string; resetOnLogout?: boolean } | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [postText, setPostText] = useState('');
   const [posting, setPosting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [postError, setPostError] = useState('');
   const [postNotice, setPostNotice] = useState('');
   const [timelineError, setTimelineError] = useState('');
@@ -257,9 +259,18 @@ export default function TimelinePage() {
     } catch (e) { console.error('Reply refresh error:', e); }
   };
 
-  const handleLogout = () => {
-    void logout();
-    router.push('/');
+  const handleLogout = async (confirmed = false) => {
+    if (loggingOut) return;
+    if (user?.resetOnLogout && !confirmed) { setConfirmLogout(true); return; }
+    setLoggingOut(true);
+    try {
+      await logout({ resetDemo: Boolean(user?.resetOnLogout) });
+      router.replace('/');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'ログアウトできませんでした。もう一度お試しください。');
+      setLoggingOut(false);
+      setConfirmLogout(false);
+    }
   };
 
   const handleTrendClick = (keyword: string) => {
@@ -271,6 +282,18 @@ export default function TimelinePage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#000', color: '#e7e9ea', fontFamily: 'system-ui, sans-serif' }}>
+
+      {confirmLogout && <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 200 }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="demo-logout-title" aria-describedby="demo-logout-description" style={{ width: '100%', maxWidth: 420, background: '#101114', border: '1px solid #536471', borderRadius: 16, padding: 24 }}>
+          <h2 id="demo-logout-title" style={{ margin: '0 0 16px', fontSize: 20 }}>今回の体験を消してログアウト</h2>
+          <p id="demo-logout-description" style={{ color: '#a6aeb7', lineHeight: 1.8 }}>趣味・モード・投稿・AI住人・会話の記憶を削除します。元には戻せません。次回はログイン後、オンボーディングから始まります。</p>
+          <p style={{ color: '#a6aeb7', fontSize: 13 }}>ログイン情報と管理者権限は残ります。</p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
+            <button autoFocus disabled={loggingOut} onClick={() => setConfirmLogout(false)} style={{ background: 'transparent', border: '1px solid #536471', borderRadius: 20, padding: '10px 16px', color: '#e7e9ea', cursor: 'pointer' }}>キャンセル</button>
+            <button disabled={loggingOut} onClick={() => void handleLogout(true)} style={{ background: '#7c3aed', border: 0, borderRadius: 20, padding: '10px 16px', color: '#fff', cursor: 'pointer' }}>{loggingOut ? '終了処理中…' : '体験を消してログアウト'}</button>
+          </div>
+        </div>
+      </div>}
 
       {/* ヘッダー */}
       <div style={{
@@ -296,7 +319,7 @@ export default function TimelinePage() {
               <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
             </svg>
           </HeaderBtn>
-          <HeaderBtn onClick={handleLogout} title="ログアウト">
+          <HeaderBtn onClick={() => void handleLogout()} title={loggingOut ? '終了処理中…' : 'ログアウト'}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
               <polyline points="16 17 21 12 16 7"/>

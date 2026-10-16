@@ -6,6 +6,8 @@ const { authMiddleware, generateToken } = require('../middleware/auth');
 const { isAdminUser } = require('../middleware/admin');
 const { sessionId, touchSession, revokeSession } = require('../services/generationActivity');
 
+const { resetsOnLogout, resetDemoWorld } = require('../services/demoReset');
+
 const router = express.Router();
 
 // シンプルなインメモリレートリミッター（express-rate-limitなしで実装）
@@ -109,7 +111,8 @@ async function login(req, res, adminLogin = false) {
       token,
       userId: user.id,
       username: user.username,
-      onboardingDone: !!user.onboarding_done
+      onboardingDone: !!user.onboarding_done,
+      resetOnLogout: resetsOnLogout(user.id, adminLogin ? 'admin' : 'user'),
     });
   } catch (e) {
     console.error(e);
@@ -123,8 +126,13 @@ router.post('/admin/login', (req, res) => login(req, res, true));
 router.post('/activity', authMiddleware, (_, res) => res.json({ success: true }));
 router.post('/logout', authMiddleware, async (req, res) => {
   try {
-    await revokeSession(req.userId, req.sessionId);
-    res.json({ success: true });
+    const reset = resetsOnLogout(req.userId, req.tokenScope);
+    if (reset && req.body?.confirmDemoReset !== true) {
+      return res.status(409).json({ error: 'ログアウトすると今回の体験が削除されます。確認してから再実行してください', code: 'DEMO_RESET_CONFIRMATION_REQUIRED' });
+    }
+    if (reset) await resetDemoWorld(req.userId, req.sessionId);
+    else await revokeSession(req.userId, req.sessionId);
+    res.json({ success: true, worldReset: reset });
   } catch (error) {
     console.error('Logout error:', error.message);
     res.status(500).json({ error: 'ログアウト処理に失敗しました' });
@@ -143,6 +151,7 @@ router.get('/me', authMiddleware, async (req, res) => {
       userId: user.id,
       username: user.username,
       onboardingDone: Boolean(user.onboarding_done),
+      resetOnLogout: resetsOnLogout(user.id, req.tokenScope),
     });
   } catch (e) {
     console.error('Session error:', e);

@@ -148,6 +148,7 @@ router.post('/post', authenticate, async (req, res) => {
         if (target.rows[0].theme_version !== version) return res.status(409).json({ error: '以前のテーマの投稿は閲覧専用です。現在のテーマで新しく投稿してください' });
       }
 
+      if (!settings) return res.status(409).json({ error: '世界設定がありません。ログインし直して最初から始めてください' });
       const postId = uuidv4();
       const createdAt = new Date().toISOString();
       const user = await db.execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] });

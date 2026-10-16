@@ -18,6 +18,7 @@
     "APP_URL": "https://soloverse-preview.pages.dev",
     "TRUST_PROXY": "true",
     "REGISTRATION_CLOSED": "true",
+    "DEMO_RESET_USER_IDS": "58b3305a-75bf-4914-bd6a-9a5b11852a6f",
     "LLM_PROVIDER_ORDER": "groq",
     "GROQ_MODELS": "openai/gpt-oss-120b",
     "LLM_DAILY_REQUEST_BUDGET": "100",

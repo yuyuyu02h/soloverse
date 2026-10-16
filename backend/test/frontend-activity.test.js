@@ -105,3 +105,22 @@ test('switching accounts in another tab discards the previous page state', async
   assert.equal(page.window.location.href, '/');
   page.unmount();
 });
+
+
+test('demo logout retains credentials until reset succeeds; failed reset remains retryable', async () => {
+  let respond;
+  const calls = [];
+  const page = browser((url, options) => { calls.push({url,options}); return new Promise(resolve => { respond = resolve; }); });
+  page.setToken('demo'); page.setUser({ userId: 'demo', username: 'demo' });
+  const failed = page.logout({ resetDemo: true });
+  const rejected = assert.rejects(failed, /reset failed/);
+  assert.equal(page.getToken(), 'demo');
+  assert.equal(JSON.parse(calls[0].options.body).confirmDemoReset, true);
+  respond(new Response(JSON.stringify({ error: 'reset failed' }), { status: 500 }));
+  await rejected;
+  assert.equal(page.getToken(), 'demo'); assert.equal(page.getUser().userId, 'demo');
+  const success = page.logout({ resetDemo: true });
+  respond(new Response(JSON.stringify({ success: true, worldReset: true })));
+  await success;
+  assert.equal(page.getToken(), null); assert.equal(page.getUser(), null);
+});
