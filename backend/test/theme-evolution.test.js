@@ -56,7 +56,7 @@ global.fetch = async (url, options) => {
   return new Response(JSON.stringify({ model: 'test',choices: [{ finish_reason:'stop',message:{ content: typeof next.content === 'string' ? next.content : JSON.stringify(next.content) } }],usage:{ total_tokens:100 } }), { status:next.status || 200,headers:next.headers || {} });
 };
 async function api(route, { user = 'owner', body } = {}) {
-  const response = await fetch(base+route, { method: body === undefined ? 'GET' : 'POST',headers:{ authorization:`Bearer ${generateToken(user)}`,'content-type':'application/json' },...(body === undefined ? {} : { body:JSON.stringify(body) }) });
+  const response = await fetch(base+route, { method: body === undefined ? 'GET' : 'POST',headers:{ authorization:`Bearer ${generateToken(user)}`,'content-type':'application/json','x-soloverse-active':'1' },...(body === undefined ? {} : { body:JSON.stringify(body) }) });
   return { status:response.status,data:await response.json() };
 }
 async function post(id, author, content, parent = null, version = 1) {
@@ -71,6 +71,7 @@ test.beforeEach(async () => {
   await db.batch(['DELETE FROM users','DELETE FROM llm_attempts','DELETE FROM llm_provider_limits'],'write');
   for (const user of ['owner','other']) {
     await db.execute({ sql:'INSERT INTO users(id,email,password_hash,username,onboarding_done) VALUES(?,?,?,?,1)',args:[user,`${user}@test.invalid`,'unused',user] });
+    await require('../src/services/generationActivity').touchSession(user, `fixture-${user}`);
     await db.execute({ sql:'INSERT INTO world_settings VALUES(?,?,?,?,?,?)',args:[user,'empathy','スターウォーズ','calm','','mid'] });
     for (let i=0;i<2;i++) await db.execute({ sql:'INSERT INTO ai_characters(id,user_id,name,username,avatar_seed,personality,interests,reply_style,reaction_frequency,delay_profile) VALUES(?,?,?,?,?,?,?,?,?,?)',args:[user+i,user,'住人'+i,`resident_${i}`,'seed','スターウォーズの感想を語る','スターウォーズ,自転車,料理','理由を添える','high','fast'] });
     await themeState(user);

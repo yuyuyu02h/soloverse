@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { PreviewBanner } from '../components/PreviewBanner';
+import { GenerationActivity } from '../components/GenerationActivity';
 
 export const metadata: Metadata = {
   title: 'SoloVerse',
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
-      <body><PreviewBanner />{children}</body>
+      <body><GenerationActivity /><PreviewBanner />{children}</body>
     </html>
   );
 }

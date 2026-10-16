@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { authMiddleware, generateToken } = require('../middleware/auth');
 const { isAdminUser } = require('../middleware/admin');
+const { sessionId, touchSession, revokeSession } = require('../services/generationActivity');
 
 const router = express.Router();
 
@@ -60,6 +61,7 @@ router.post('/register', async (req, res) => {
       args: [id, email, hash, username]
     });
     const token = generateToken(id);
+    await touchSession(id, sessionId(token));
     res.json({ token, userId: id, username, onboardingDone: false });
   } catch (e) {
     console.error(e);
@@ -93,6 +95,7 @@ async function login(req, res, adminLogin = false) {
 
     if (adminLogin && !isAdminUser(user.id)) return res.status(403).json({ error: '管理者として許可されたアカウントを使用してください' });
     const token = generateToken(user.id, adminLogin ? 'admin' : 'user');
+    if (!adminLogin) await touchSession(user.id, sessionId(token));
     res.json({
       token,
       userId: user.id,
@@ -106,6 +109,18 @@ async function login(req, res, adminLogin = false) {
 }
 router.post('/login', (req, res) => login(req, res));
 router.post('/admin/login', (req, res) => login(req, res, true));
+
+// Visibility is reported by the client; this route never generates content.
+router.post('/activity', authMiddleware, (_, res) => res.json({ success: true }));
+router.post('/logout', authMiddleware, async (req, res) => {
+  try {
+    await revokeSession(req.userId, req.sessionId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Logout error:', error.message);
+    res.status(500).json({ error: 'ログアウト処理に失敗しました' });
+  }
+});
 
 // localStorageの表示情報を信頼せず、現在のセッション状態をDBから再取得する。
 router.get('/me', authMiddleware, async (req, res) => {

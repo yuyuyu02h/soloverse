@@ -4,6 +4,7 @@ const { callLLM, buildWorldSystemPrompt, safeParseJSON } = require('./llm');
 const { serializeWorldTask } = require('./worldTasks');
 const { enabled } = require('./contentConfig');
 const { themeState, currentVersion } = require('./worldTheme');
+const { activeGenerationSQL, isGenerationActive } = require('./generationActivity');
 
 function analyzeEngagementIntent(value) {
   const content = String(value || '').normalize('NFKC').trim();
@@ -112,6 +113,7 @@ async function backfillDirectReplies() {
           FROM posts p JOIN world_settings w ON w.user_id=p.user_id
           WHERE p.author_type = 'user' AND p.reply_to IS NULL
             AND w.position != 'admired'
+            AND ${activeGenerationSQL('p.user_id')}
             AND ${currentVersion('p')}
             AND datetime(p.created_at) <= datetime('now', '-2 minutes')
             AND datetime(p.created_at) >= datetime('now', '-24 hours')
@@ -148,7 +150,7 @@ async function backfillDirectReplies() {
 }
 
 async function processReactionQueue() {
-  const worlds = (await db.execute('SELECT DISTINCT user_id FROM reaction_queue WHERE done=0')).rows;
+  const worlds = (await db.execute(`SELECT DISTINCT user_id FROM reaction_queue rq WHERE done=0 AND ${activeGenerationSQL('rq.user_id')}`)).rows;
   for (const row of worlds) await themeState(row.user_id);
   // 有名人モードは観客シーンが反応を担当する。切替前に残った通常キューも処理しない。
   await db.execute(`UPDATE reaction_queue AS rq SET done=1 WHERE done=0 AND (
@@ -159,17 +161,20 @@ async function processReactionQueue() {
     sql: `SELECT rq.*, ac.name, ac.username, ac.personality, ac.reply_style, ac.interests
           FROM reaction_queue rq JOIN ai_characters ac ON rq.character_id = ac.id
           WHERE rq.done = 0 AND datetime(rq.scheduled_at) <= datetime('now')
+            AND ${activeGenerationSQL('rq.user_id')}
             AND ${currentVersion('rq')} AND ${currentVersion('ac')}
           ORDER BY datetime(rq.scheduled_at) ASC LIMIT 20`,
   });
 
   for (const item of pending.rows) {
+    if (!await isGenerationActive(item.user_id)) continue;
     try {
       if (item.reaction_type === 'like')  await processLike(item);
       if (item.reaction_type === 'reply') await serializeWorldTask(item.user_id, () => processReply(item));
       await db.execute({ sql: 'UPDATE reaction_queue SET done = 1 WHERE id = ?', args: [item.id] });
     } catch (e) {
       if (e.code === 'LLM_DEFERRED') {
+        if (e.message === 'user_inactive') continue; // Pause without consuming retries or changing the reservation.
         await db.execute({ sql: "UPDATE reaction_queue SET scheduled_at=datetime('now','+5 minutes') WHERE id=?", args: [item.id] });
         await require('./llmRuntime').recordContent(item.user_id, 'reply', 'deferred', e.message);
         continue; // Waiting for quota does not consume a generation retry.
@@ -266,7 +271,7 @@ async function processReply(item) {
   if (enabled() && !char) return;
   const replyContent = enabled()
     ? await require('./contentPipeline').generateReply(item.user_id, char, settings, replyTarget, { question: post.content })
-    : (await callLLM(system, promptText, 350)).trim().slice(0, 140);
+    : (await callLLM(system, promptText, 350, { userId: item.user_id, job: 'reply' })).trim().slice(0, 140);
   if (!replyContent) throw new Error('空の返信が返されました');
 
   const replyId = enabled() ? `reaction-${item.id}` : uuidv4();
@@ -322,7 +327,7 @@ ${chars.slice(0, 8).map(c => `- ${c.name}(@${c.username}): ${c.personality} / �
 良い例:「砂漠の惑星の夕焼けシーン、色づかいが本当に好き」
 JSON配列のみ出力（説明・\`\`\`不要）:
 [{"username": "username（@なし）", "content": "投稿内容（50字以内）"}]`,
-    1000
+    1000, { userId, job: 'seed', priority: 'interactive' }
   );
 
   const posts = safeParseJSON(raw);

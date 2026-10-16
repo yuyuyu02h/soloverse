@@ -78,7 +78,7 @@ function getRequestInterval(target) {
   return readMilliseconds(target.provider.intervalEnv, target.provider.defaultIntervalMs);
 }
 
-function pacedFetch(target, url, opts) {
+function pacedFetch(target, url, opts, beforeSend) {
   const state = pacers.get(target.providerName) || { chain: Promise.resolve(), lastRequestAt: 0 };
   const signal = opts.signal;
   const run = state.chain.then(async () => {
@@ -87,6 +87,9 @@ function pacedFetch(target, url, opts) {
     if (waitMs > 0) await require('node:timers/promises').setTimeout(waitMs, undefined, { signal });
     signal.throwIfAborted();
     if (isCoolingDown(target)) throw new Error('モデルはクールダウン中です');
+    // Recheck activity after pacing/queue waits, immediately before spending quota.
+    await beforeSend();
+    signal.throwIfAborted();
     state.lastRequestAt = Date.now();
     return fetch(url, opts);
   });
@@ -211,8 +214,9 @@ async function callLLMInternal(system, user, maxTokens, options) {
     try {
       const request = buildProviderRequest(target, messages, maxTokens, controller.signal);
       const estimatedTokens = (system || '').length + user.length + Math.max(1024, maxTokens + 512);
-      attemptId = await runtime.beforeAttempt(target, options, estimatedTokens);
-      response = await pacedFetch(target, request.url, request.options);
+      response = await pacedFetch(target, request.url, request.options, async () => {
+        attemptId = await runtime.beforeAttempt(target, options, estimatedTokens);
+      });
       const responseText = await response.text();
       try {
         data = responseText ? JSON.parse(responseText) : {};

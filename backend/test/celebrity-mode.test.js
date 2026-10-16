@@ -59,6 +59,7 @@ test.before(async () => {
       sql: 'INSERT INTO users(id,email,password_hash,username,onboarding_done) VALUES(?,?,?,?,1)',
       args: [id, `${id}@test.invalid`, 'unused', id],
     });
+    await require('../src/services/generationActivity').touchSession(id, `fixture-${id}`);
     await db.execute({
       sql: 'INSERT INTO world_settings(user_id,position,interests,atmosphere,exclusions,follower_scale) VALUES(?,?,?,?,?,?)',
       args: [id, position, '映画', 'calm', 'no_criticism', position === 'admired' ? 'large' : 'mid'],

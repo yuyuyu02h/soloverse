@@ -1,6 +1,7 @@
 // One runner: priority admission, persistent quota reservations, and content-free telemetry.
 const { randomUUID } = require('node:crypto');
 const { enabled, config } = require('./contentConfig');
+const { isGenerationActive, activeGenerationSQL } = require('./generationActivity');
 let db;
 let active = false;
 const waiting = [];
@@ -24,11 +25,13 @@ async function drain() {
   finally { active = false; drain(); }
 }
 async function beforeAttempt(target, options, estimatedTokens) {
+  if (options.userId && !await isGenerationActive(options.userId)) throw new DeferredError('user_inactive');
   if (!enabled() || !db) return null;
   const cfg = config();
   const isBackground = options.priority === 'background';
   if (isBackground) {
-    const replies = await db.execute("SELECT 1 FROM reaction_queue WHERE done=0 AND reaction_type='reply' AND datetime(scheduled_at)<=datetime('now','+3 minutes') LIMIT 1");
+    const replies = await db.execute(`SELECT 1 FROM reaction_queue rq WHERE done=0 AND reaction_type='reply'
+      AND ${activeGenerationSQL('rq.user_id')} AND datetime(scheduled_at)<=datetime('now','+3 minutes') LIMIT 1`);
     if (waiting.some(item => item.priority === 0) || replies.rows.length) throw new DeferredError('reply_priority');
   }
   const usage = (await db.execute("SELECT COUNT(*) AS requests, COALESCE(SUM(tokens),0) AS tokens FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')")).rows[0];

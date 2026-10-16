@@ -5,6 +5,7 @@ const { currentVersion } = require('./worldTheme');
 const { resolveMode } = require('./worldModes');
 const { config } = require('./contentConfig');
 const { reviewBatch } = require('./contentReview');
+const { activeGenerationSQL } = require('./generationActivity');
 
 const COMMENT_CATEGORIES = new Set(['praise', 'empathy', 'question', 'humor', 'analysis']);
 const AUDIENCE_IDENTITIES = [
@@ -223,6 +224,7 @@ async function processPendingCelebrityScenes(limit = 3) {
           JOIN posts p ON p.id=s.post_id AND p.user_id=s.user_id
           JOIN world_settings w ON w.user_id=s.user_id
           WHERE s.status='pending' AND w.position='admired'
+            AND ${activeGenerationSQL('s.user_id')}
             AND ${currentVersion('p')}
           ORDER BY datetime(s.started_at) ASC LIMIT ?`,
     args: [Math.max(1, Math.min(10, Number(limit) || 3))],

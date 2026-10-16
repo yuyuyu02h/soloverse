@@ -156,6 +156,7 @@ async function initDB() {
   await createIndexes();
   await require('./contentSchema').initContentSchema(db);
   await require('./celebritySchema').initCelebritySchema(db);
+  await require('../services/generationActivity').initActivitySchema();
 
   console.log('DB initialized');
 }

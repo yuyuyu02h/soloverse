@@ -8,6 +8,7 @@ const { generateReply } = require('./contentPipeline');
 const { recordContent } = require('./llmRuntime');
 const { themeState, currentVersion } = require('./worldTheme');
 const { matchesTheme } = require('./topicPolicy');
+const { activeGenerationSQL, isGenerationActive } = require('./generationActivity');
 
 function parseDBTimestamp(value) {
   if (!value) return 0;
@@ -34,6 +35,7 @@ function getTimeSlot() {
 // キャラ同士のリプライチェーン・ユーザーへのメンションを含む
 // ─────────────────────────────────────────────────────────
 async function runAutonomousTimeline(userId) {
+  if (!await isGenerationActive(userId)) return 0;
   await themeState(userId);
   if (require('./contentConfig').enabled()) {
     const pipeline = require('./contentPipeline');
@@ -114,7 +116,7 @@ JSON配列のみ出力（説明・\`\`\`不要）:
 [
   {"username": "username（@なし）", "content": "投稿内容", "reply_to_id": null, "reply_to_index": null}
 ]`,
-    1800
+    1800, { userId, job: 'autonomous', priority: 'background' }
   );
 
   const posts = safeParseJSON(raw);
@@ -225,6 +227,7 @@ async function runTrendGeneration(userId) {
 // autonomous_log で一元管理
 // ─────────────────────────────────────────────────────────
 async function runCharacterGrowth(userId) {
+  if (!await isGenerationActive(userId)) return 0;
   const currentSettings = await themeState(userId);
   const [charsResult, settingsResult, postsResult] = await Promise.all([
     db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')}`, args: [userId] }),
@@ -362,6 +365,7 @@ async function runCharacterGrowth(userId) {
 // 24時間以上投稿なし → AI が呼びかけ投稿 + absence 通知
 // ─────────────────────────────────────────────────────────
 async function checkAbsenceReactions(userId) {
+  if (!await isGenerationActive(userId)) return;
   const lastPost = await db.execute({
     sql: `SELECT created_at FROM posts
           WHERE user_id = ? AND author_type = 'user'
@@ -439,7 +443,7 @@ async function checkAbsenceReactions(userId) {
 // バッチ: 全ユーザー処理
 // ─────────────────────────────────────────────────────────
 async function runAllUsers() {
-  const users = await db.execute({ sql: `SELECT id FROM users WHERE onboarding_done = 1` });
+  const users = await db.execute({ sql: `SELECT id FROM users WHERE onboarding_done = 1 AND ${activeGenerationSQL('users.id')}` });
 
   for (const user of users.rows) {
     await serializeWorldTask(user.id, async () => { try {
@@ -459,6 +463,7 @@ async function runAllUsers() {
         () => checkAbsenceReactions(user.id),
       ];
       for (const job of jobs) {
+        if (!await isGenerationActive(user.id)) break;
         try { await job(); } catch (e) { console.warn(`[Engine] Job failed for user ${user.id}:`, e.message); }
       }
     } catch (e) {

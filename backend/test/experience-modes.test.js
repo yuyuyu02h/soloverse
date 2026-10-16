@@ -44,7 +44,7 @@ global.fetch = async (url, options) => {
   return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:typeof content==='string'?content:JSON.stringify(content)}}],usage:{total_tokens:100}}),{headers:{'content-type':'application/json'}});
 };
 async function api(route,body,user='owner',token=generateToken(user)) {
-  const response=await fetch(base+route,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
+  const response=await fetch(base+route,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json','x-soloverse-active':'1',...(token?{authorization:`Bearer ${token}`}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
   return {status:response.status,data:await response.json()};
 }
 async function setup(mode,context) {

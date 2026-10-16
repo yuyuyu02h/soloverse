@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { db } = require('../db/schema');
+const { randomUUID } = require('node:crypto');
+const { sessionId, isSessionRevoked, touchSession } = require('../services/generationActivity');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const KNOWN_WEAK_SECRETS = new Set(['change-me', 'soloverse-change-this-in-production']);
@@ -46,6 +48,14 @@ async function authMiddleware(req, res, next) {
 
     req.userId = decoded.userId;
     req.tokenScope = decoded.scope || 'user';
+    req.sessionId = sessionId(token);
+    if (await isSessionRevoked(req.sessionId)) {
+      return res.status(401).json({ error: 'ログアウト済みです。再度ログインしてください', code: 'SESSION_REVOKED' });
+    }
+    // Hidden-tab polling and admin requests must not keep a world generating.
+    if (req.tokenScope === 'user' && !req.baseUrl.startsWith('/api/admin') && req.headers['x-soloverse-active'] === '1' && req.path !== '/logout') {
+      await touchSession(req.userId, req.sessionId);
+    }
     next();
   } catch {
     return res.status(401).json({ error: 'トークンが無効です', code: 'INVALID_TOKEN' });
@@ -53,7 +63,7 @@ async function authMiddleware(req, res, next) {
 }
 
 function generateToken(userId, scope = 'user') {
-  return jwt.sign({ userId, scope }, JWT_SECRET, { expiresIn: scope === 'admin' ? '1h' : '30d' });
+  return jwt.sign({ userId, scope }, JWT_SECRET, { jwtid: randomUUID(), expiresIn: scope === 'admin' ? '1h' : '30d' });
 }
 
 module.exports = { authMiddleware, generateToken };

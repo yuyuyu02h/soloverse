@@ -47,6 +47,7 @@ test.beforeEach(async () => {
   await db.batch(['DELETE FROM users', 'DELETE FROM llm_attempts', 'DELETE FROM llm_provider_limits'], 'write');
   for (const user of ['owner', 'other']) {
     await db.execute({ sql: 'INSERT INTO users(id,email,password_hash,username,onboarding_done) VALUES(?,?,?,?,1)', args: [user, `${user}@test.invalid`, 'unused', user] });
+    await require('../src/services/generationActivity').touchSession(user, `fixture-${user}`);
     await db.execute({ sql: 'INSERT INTO world_settings VALUES(?,?,?,?,?,?)', args: [user, 'observer', '映画', 'calm', '', 'small'] });
     for (let i = 0; i < 2; i++) await db.execute({ sql: 'INSERT INTO ai_characters(id,user_id,name,username,avatar_seed,personality,interests,reply_style,reaction_frequency,delay_profile) VALUES(?,?,?,?,?,?,?,?,?,?)', args: [user + i, user, '住人' + i, `resident_${i}`, 'seed', '映画を丁寧に観る', '映画,音楽', '理由を添える', 'low', 'fast'] });
   }

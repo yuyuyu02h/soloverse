@@ -10,6 +10,7 @@ const { themeState, currentVersion } = require('./worldTheme');
 const { topicHints } = require('./topicPolicy');
 const { reviewBatch } = require('./contentReview');
 const { resolveMode } = require('./worldModes');
+const { isGenerationActive, activeGenerationSQL } = require('./generationActivity');
 
 async function world(userId) {
   const settings = await themeState(userId);
@@ -24,6 +25,7 @@ async function world(userId) {
 // Caller holds the existing per-world lock. Each refilling pass is strictly bounded.
 async function fillPool(userId, { seed = false } = {}) {
   if (!enabled()) return 0;
+  if (!await isGenerationActive(userId)) return 0;
   const cfg = config();
   const settings = await themeState(userId);
   if (!settings) return 0;
@@ -74,6 +76,11 @@ ${JSON.stringify(w.recent.filter(p => !p.reply_to).slice(0, 6))}
 半日分の多様な話題を用意する。`,
       Math.min(10000, missing * 160 + 400), { userId, job, priority: seed ? 'interactive' : 'background', expectJSON: true, onResult: meta => { resultMeta = meta; } });
     } catch (error) {
+      if (error.code === 'LLM_DEFERRED' && error.message === 'user_inactive') {
+        // Pausing is not a provider failure: do not make a returning user wait 30 minutes.
+        await db.execute({ sql: 'UPDATE content_pool_state SET next_fill_at=? WHERE user_id=? AND theme_version=?', args: [new Date().toISOString(), userId, settings.theme_version] });
+        return 0;
+      }
       await runtime.recordContent(userId, job, 'deferred', error.code === 'LLM_DEFERRED' ? error.message : 'provider_unavailable');
       break;
     }
@@ -123,6 +130,10 @@ ${JSON.stringify(w.recent.filter(p => !p.reply_to).slice(0, 6))}
       }
       accepted.splice(0,accepted.length,...approved);
     } catch (error) {
+      if (error.code === 'LLM_DEFERRED' && error.message === 'user_inactive') {
+        await db.execute({ sql: 'UPDATE content_pool_state SET next_fill_at=? WHERE user_id=? AND theme_version=?', args: [new Date().toISOString(), userId, settings.theme_version] });
+        return 0;
+      }
       await runtime.recordContent(userId,job,'deferred',error.code === 'LLM_DEFERRED' ? error.message : 'quality_review_wait');
       if (cfg.templates) await ambientFallback(userId,w,contexts,job);
       return 0;
@@ -165,6 +176,7 @@ async function ambientFallback(userId, w, contexts, job) {
 
 async function publishPool(userId) {
   if (!enabled()) return 0;
+  if (!await isGenerationActive(userId)) return 0;
   const settings = await themeState(userId);
   if (!settings) return 0;
   await db.execute({ sql: "UPDATE content_candidates SET state='discarded' WHERE user_id=? AND state='pending' AND theme_version!=?", args: [userId, settings.theme_version] });
@@ -256,7 +268,8 @@ async function generateReply(userId, char, settings, target, { job = 'reply', pr
 
 async function publishAll() {
   if (!enabled()) return;
-  const users = (await db.execute("SELECT DISTINCT user_id FROM content_candidates WHERE state='pending' AND scheduled_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')")).rows;
+  const users = (await db.execute(`SELECT DISTINCT user_id FROM content_candidates c WHERE state='pending'
+    AND ${activeGenerationSQL('c.user_id')} AND scheduled_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')`)).rows;
   for (const { user_id: userId } of users) await serializeWorldTask(userId, () => publishPool(userId));
   await db.batch([
     "DELETE FROM content_events WHERE created_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days')",

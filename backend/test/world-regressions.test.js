@@ -31,6 +31,7 @@ test.before(async () => {
   await initDB();
   for (const userId of ['owner', 'other']) {
     await db.execute({ sql: 'INSERT INTO users (id,email,password_hash,username,onboarding_done) VALUES (?,?,?,?,1)', args: [userId, userId + '@test.invalid', 'unused', userId] });
+    await require('../src/services/generationActivity').touchSession(userId, `fixture-${userId}`);
     await db.execute({ sql: 'INSERT INTO world_settings VALUES (?,?,?,?,?,?)', args: [userId, 'observer', '映画', 'vent', '', 'small'] });
     for (let i = 0; i < 3; i++) await db.execute({
       sql: 'INSERT INTO ai_characters (id,user_id,name,username,avatar_seed,personality,interests,reply_style,reaction_frequency,delay_profile) VALUES (?,?,?,?,?,?,?,?,?,?)',

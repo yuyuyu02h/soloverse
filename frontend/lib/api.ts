@@ -8,10 +8,26 @@ export function getToken(): string | null {
 
 export function setToken(token: string) {
   localStorage.setItem('sv_token', token);
+  window.dispatchEvent(new Event('sv-auth-change'));
 }
 
 export function clearToken() {
   localStorage.removeItem('sv_token');
+  window.dispatchEvent(new Event('sv-auth-change'));
+}
+
+export async function logout() {
+  const token = getToken();
+  clearToken();
+  clearUser();
+  if (!token || SCREEN_PREVIEW) return;
+  try {
+    await fetch(`${API}/api/auth/logout`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, keepalive: true,
+    });
+  } catch {
+    // Offline logout still clears this browser; its server lease expires within five minutes.
+  }
 }
 
 export function clearUser() {
@@ -43,6 +59,9 @@ async function request(path: string, options: RequestInit = {}) {
     ...(options.headers as Record<string, string>),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (token && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    headers['X-SoloVerse-Active'] = '1';
+  }
 
   let res: Response;
   try {
@@ -55,7 +74,7 @@ async function request(path: string, options: RequestInit = {}) {
   try { data = raw ? JSON.parse(raw) : {}; }
   catch { throw new Error(`サーバーから不正な応答を受信しました (HTTP ${res.status})`); }
 
-  if (res.status === 401) {
+  if (res.status === 401 && token === getToken()) {
     // トークンの署名は有効でも、参照先のユーザーがDB上に存在しない場合がある
     // （開発中にDBだけリセットした/本番でセッションが失効した等）。
     // この場合は手動でデベロッパツールから消さなくても、自動でログイン画面に戻す。

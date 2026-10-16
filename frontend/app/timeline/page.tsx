@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, clearToken, clearUser, setUser as saveUser } from '../../lib/api';
+import { api, logout, setUser as saveUser } from '../../lib/api';
 import { PostCard } from '../../components/PostCard';
 import { ReplyPanel } from '../../components/ReplyPanel';
 import { NotificationPanel } from '../../components/NotificationPanel';
@@ -258,7 +258,7 @@ export default function TimelinePage() {
   };
 
   const handleLogout = () => {
-    clearToken(); clearUser();
+    void logout();
     router.push('/');
   };
 
