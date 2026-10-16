@@ -3,8 +3,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import styles from './page.module.css';
+import { SCREEN_PREVIEW, PREVIEW_NOTICE } from '../../lib/deployment';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const SESSION_KEY = 'sv_admin_token';
 interface Overview {
   username: string; users: number; configuredUsers: number; posts: number; pending: number;
@@ -12,6 +13,7 @@ interface Overview {
   today: { outcome: string; total: number }[]; llmConfigured: boolean; checkedAt: string;
 }
 async function adminRequest(path: string, body?: object) {
+  if (SCREEN_PREVIEW) throw new Error(PREVIEW_NOTICE);
   const token = sessionStorage.getItem(SESSION_KEY);
   const response = await fetch(`${API}${path}`, {
     method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -36,7 +38,7 @@ export default function AdminPage() {
     catch (e) { setError(e instanceof Error ? e.message : '接続に失敗しました'); if (!sessionStorage.getItem(SESSION_KEY)) setOverview(null); }
     finally { setBusy(false); }
   };
-  useEffect(() => { if (sessionStorage.getItem(SESSION_KEY)) void refresh(); else setBusy(false); }, []);
+  useEffect(() => { if (!SCREEN_PREVIEW && sessionStorage.getItem(SESSION_KEY)) void refresh(); else setBusy(false); }, []);
   const login = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); if (busy) return;
     setBusy(true); setError('');
@@ -55,10 +57,10 @@ export default function AdminPage() {
       {error && <p className={styles.error} role="alert">{error}</p>}
       {!overview ? <form className={styles.panel} onSubmit={login} aria-label="管理者ログイン" aria-busy={busy}>
         <label htmlFor="admin-email">メールアドレス</label>
-        <input id="admin-email" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} maxLength={254} required disabled={busy} />
+        <input id="admin-email" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} maxLength={254} required disabled={busy || SCREEN_PREVIEW} />
         <label htmlFor="admin-password">パスワード</label>
-        <input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} maxLength={128} required disabled={busy} />
-        <button type="submit" disabled={busy}>{busy ? '確認しています…' : '管理者としてログイン'}</button>
+        <input id="admin-password" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} maxLength={128} required disabled={busy || SCREEN_PREVIEW} />
+        <button type="submit" disabled={busy || SCREEN_PREVIEW}>{busy ? '確認しています…' : '管理者としてログイン'}</button>
         <Link href="/">通常のログインへ戻る</Link>
       </form> : <>
         <div className={styles.actions}><button onClick={()=>void refresh()} disabled={busy}>{busy ? '更新中…' : '更新する'}</button><button disabled={busy} onClick={()=>{sessionStorage.removeItem(SESSION_KEY);setOverview(null);setError('');}}>管理者ログアウト</button></div>

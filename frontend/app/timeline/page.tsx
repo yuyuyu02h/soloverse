@@ -9,6 +9,7 @@ import { NotificationPanel } from '../../components/NotificationPanel';
 import { TrendPanel } from '../../components/TrendPanel';
 import { Avatar } from '../../components/utils';
 import type { Post } from '../../components/PostCard';
+import { SCREEN_PREVIEW } from '../../lib/deployment';
 
 export default function TimelinePage() {
   const router = useRouter();
@@ -58,6 +59,7 @@ export default function TimelinePage() {
 
   // ─── 初期化 ────────────────────────────────────────────
   useEffect(() => {
+    if (SCREEN_PREVIEW) { router.replace('/onboarding'); return; }
     let cancelled = false;
     mountedRef.current = true;
     api.get('/api/auth/me').then(u => {

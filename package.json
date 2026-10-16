@@ -1,0 +1,13 @@
+{
+  "name": "soloverse-deploy",
+  "private": true,
+  "scripts": {
+    "build:cloudflare": "node scripts/build-cloudflare.cjs",
+    "preview:cloudflare": "wrangler pages dev frontend/out --port 8787",
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler pages deploy frontend/out --project-name soloverse-preview"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.1"
+  },
+  "version": "0.0.0"
+}

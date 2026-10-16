@@ -1,4 +1,5 @@
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { SCREEN_PREVIEW, PREVIEW_NOTICE } from './deployment';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -35,6 +36,7 @@ export function setUser(user: object) {
 }
 
 async function request(path: string, options: RequestInit = {}) {
+  if (SCREEN_PREVIEW) throw new Error(PREVIEW_NOTICE);
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

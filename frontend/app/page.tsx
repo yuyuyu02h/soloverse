@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ArrowRight, Bot, Eye, EyeOff, Heart, MessageSquare } from 'lucide-react';
 import { api, clearToken, clearUser, getToken, setToken, setUser } from '../lib/api';
 import styles from './page.module.css';
+import { SCREEN_PREVIEW } from '../lib/deployment';
 
 interface AIPost {
   id: string;
@@ -84,7 +85,7 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!getToken()) {
+    if (SCREEN_PREVIEW || !getToken()) {
       setCheckingSession(false);
       return;
     }
@@ -139,7 +140,7 @@ export default function Home() {
     }
   };
 
-  const busy = loading || checkingSession;
+  const busy = loading || checkingSession || SCREEN_PREVIEW;
 
   return (
     <div className={styles.page}>

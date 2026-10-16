@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, getToken, getUser, setUser } from '../../lib/api';
 import styles from './page.module.css';
+import { SCREEN_PREVIEW } from '../../lib/deployment';
 import { MODE_OPTIONS, CONTEXT_FIELDS, ROLE_OPTIONS, COMMUNITY_OPTIONS, atmosphereOptions, type ExperienceMode } from '../../lib/worldModes';
 
 type Step = 1 | 2 | 3 | 4 | 'loading';
@@ -46,6 +47,7 @@ export default function OnboardingPage() {
   const submittedRef = useRef(false);
 
   useEffect(() => {
+    if (SCREEN_PREVIEW) return;
     const token = getToken();
     if (!token) { router.replace('/'); return; }
     api.get('/api/auth/me').then(user => {
@@ -82,6 +84,7 @@ export default function OnboardingPage() {
   const context = mode === 'celebrity' ? celebrityRole.trim() : mode === 'community' ? community.trim() : allInterests;
 
   const submit = async () => {
+    if (SCREEN_PREVIEW) return;
     if (submittedRef.current) return;
     submittedRef.current = true;
     setStep('loading');
@@ -108,7 +111,7 @@ export default function OnboardingPage() {
   const nextDisabled = step === 1 ? !mode
     : step === 2 ? !context
     : step === 3 ? !atmosphere
-    : submittedRef.current;
+    : submittedRef.current || SCREEN_PREVIEW;
 
   const advance = () => {
     if (step === 1) setStep(2);
@@ -209,6 +212,7 @@ export default function OnboardingPage() {
                         <ChoiceCard key={opt.value} selected={exclusions.includes(opt.value)} onClick={() => toggleExclusion(opt.value)} label={opt.label} multi />
                       ))}
                     </div>
+                    {SCREEN_PREVIEW && <p className={styles.sub} style={{ marginTop: 16 }}>プレビューでは設定画面まで確認できます。AIによる世界の生成は準備中です。</p>}
                     {error && (
                       <div className={styles.error} role="alert">
                         <p>{error}</p>
