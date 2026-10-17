@@ -177,3 +177,20 @@ test('concurrent onboarding submissions generate and save only one world',async(
   assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);assert.equal(calls.length,2);
   assert.equal((await db.execute("SELECT COUNT(*) n FROM ai_characters WHERE user_id='owner'")).rows[0].n,10);
 });
+
+
+test('admin connection probe targets one allowlisted provider using only the fixed fictional prompt',async()=>{
+ const token=generateToken('admin','admin');
+ const before=calls.length;
+ assert.equal((await api('/api/admin/ai-check',{provider:'untrusted'},'admin',token)).status,400);
+ assert.equal(calls.length,before);
+ process.env.LLM_PROVIDER_ORDER='groq,gemini,openrouter';
+ process.env.GEMINI_API_KEY='test-gemini-key';process.env.GEMINI_MODELS='probe-gemini';
+ try{
+  const checked=await api('/api/admin/ai-check',{provider:'gemini'},'admin',token);
+  assert.equal(checked.status,200);assert.equal(checked.data.provider,'gemini');
+  assert.equal(calls.length,before+1);assert.equal(calls.at(-1).model,'probe-gemini');
+  assert.equal(calls.at(-1).messages[0].content,'これは架空データによる接続確認です。');
+  assert.equal((await api('/api/admin/ai-check',{provider:'gemini'},'owner')).status,403);
+ }finally{process.env.LLM_PROVIDER_ORDER='groq';delete process.env.GEMINI_API_KEY;delete process.env.GEMINI_MODELS;}
+});

@@ -179,7 +179,7 @@ async function callLLM(system, user, maxTokens = 1000, options = {}) {
 
 async function callLLMInternal(system, user, maxTokens, options) {
   const runtime = require('./llmRuntime');
-  const targets = await runtime.orderTargets(getTargets());
+  const targets = await runtime.orderTargets(getTargets().filter(target => !options.provider || target.providerName === options.provider));
   if (!targets.length) throw new Error('LLM APIキーが設定されていません。backend/.env を確認してください');
 
   // 呼び出し元のプロンプトに「JSON」という指示語が含まれるかどうかで、

@@ -86,3 +86,5 @@ Cloudflareの初期投稿は、候補の生成と、内容検査・公開を別�
 1社あたりの待機は最大18秒、全体60秒です。キー・モデル名は運用者が登録したものを使用し、初回公開時は各社の実接続を架空データで確認します。秘密キーをコードやMDへ書き込まず、CloudflareのWorker Secretsへ登録してください。キーの未登録や実モデルの制限により、3社すべてを使えるとは限りません。
 
 モデルと無料枠の確認先（2026-10-17）: [Gemini公式料金表](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.5-flash-lite)、[OpenRouter Free Models](https://openrouter.ai/collections/free-models)。無料枠・利用可能モデルは各社側で変更されることがあります。
+
+管理者の `POST /api/admin/ai-check` は任意の `provider`（`groq` / `gemini` / `openrouter`）で1社だけを接続確認できます。通常の生成順や世界の設定は変更せず、固定の架空文だけを使います。省略時は通常の切り替え順で確認します。
