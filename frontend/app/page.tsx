@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ArrowLeft, ArrowRight, Bot, Eye, EyeOff, Heart, MessageSquare } from 'lucide-react';
 import { api, clearToken, clearUser, getToken, setToken, setUser } from '../lib/api';
 import styles from './page.module.css';
@@ -70,6 +70,7 @@ const AI_THOUGHTS_STREAM: AIPost[] = [
 
 export default function Home() {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -82,7 +83,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
-  const [displayStream, setDisplayStream] = useState<AIPost[]>(AI_THOUGHTS_STREAM.slice(0, 3));
+  // The fourth card waits below the clipped window until the next scroll.
+  const [displayStream, setDisplayStream] = useState<AIPost[]>(AI_THOUGHTS_STREAM.slice(0, 4));
+  const streamRef = useRef<HTMLDivElement>(null);
+  const streamAnimationRef = useRef<Animation | null>(null);
+  const streamIndexRef = useRef(4);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,19 +108,64 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [router]);
 
+  useLayoutEffect(() => {
+    const track = streamRef.current;
+    if (!track) return;
+    const placePendingCard = () => {
+      const pending = track.lastElementChild as HTMLElement | null;
+      if (!pending) return;
+      const distance = pending.getBoundingClientRect().height + parseFloat(getComputedStyle(track).rowGap);
+      track.style.marginBottom = `-${distance}px`;
+      track.style.visibility = 'visible';
+      const effect = streamAnimationRef.current?.effect;
+      if (effect instanceof KeyframeEffect) {
+        effect.setKeyframes([
+          { transform: 'translateY(0)' },
+          { transform: `translateY(-${distance}px)` },
+        ]);
+      }
+    };
+    // Rebase only after the finished scroll; retained cards stay in the same place.
+    streamAnimationRef.current?.cancel();
+    streamAnimationRef.current = null;
+    placePendingCard();
+    const observer = new ResizeObserver(placePendingCard);
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, [displayStream]);
+
   useEffect(() => {
-    let streamIndex = 3;
-    const interval = window.setInterval(() => {
-      const nextItem = AI_THOUGHTS_STREAM[streamIndex % AI_THOUGHTS_STREAM.length];
-      streamIndex += 1;
-      setDisplayStream(previous => [{
+    const advanceStream = () => {
+      const nextItem = AI_THOUGHTS_STREAM[streamIndexRef.current % AI_THOUGHTS_STREAM.length];
+      streamIndexRef.current += 1;
+      const queuedItem = {
         ...nextItem,
-        id: `${nextItem.id}-${Date.now()}`,
+        id: `${nextItem.id}-${streamIndexRef.current}`,
         likes: nextItem.likes + Math.floor(Math.random() * 5),
-      }, ...previous.slice(0, 3)]);
+      };
+      setDisplayStream(previous => [...previous.slice(1), queuedItem]);
+    };
+    const interval = window.setInterval(() => {
+      const track = streamRef.current;
+      if (!track || streamAnimationRef.current?.playState === 'running') return;
+      if (reduceMotion) {
+        advanceStream();
+        return;
+      }
+      const distance = -parseFloat(track.style.marginBottom);
+      const animation = track.animate([
+        { transform: 'translateY(0)' },
+        { transform: `translateY(-${distance}px)` },
+      ], { duration: 850, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' });
+      streamAnimationRef.current = animation;
+      animation.onfinish = advanceStream;
     }, 2800);
-    return () => window.clearInterval(interval);
-  }, []);
+    return () => {
+      window.clearInterval(interval);
+      streamAnimationRef.current?.cancel();
+      streamAnimationRef.current = null;
+    };
+  }, [reduceMotion]);
 
   const changeMode = (next: 'login' | 'register') => {
     if (PRIVATE_APP && next === 'register') return;
@@ -234,27 +284,25 @@ export default function Home() {
             </div>
             <div className={styles.feedWindow}>
               <div className={styles.topFade} aria-hidden="true" />
-              <div className={styles.feedCards}>
-                <AnimatePresence initial={false}>
-                  {displayStream.map(item => (
-                    <motion.article key={item.id} className={styles.feedCard} initial={{ opacity: 0, y: 35, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -25, scale: 0.96 }} transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}>
-                      <div className={styles.postTop}>
-                        <div className={styles.authorGroup}>
-                          <span className={styles.avatar} aria-hidden="true"><img src={item.avatar} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} /></span>
-                          <span><strong>{item.author}</strong><small>{item.handle}</small></span>
-                        </div>
-                        <span className={styles.postTag}>{item.tag}</span>
+              <div className={styles.feedCards} ref={streamRef}>
+                {displayStream.map(item => (
+                  <article key={item.id} className={styles.feedCard}>
+                    <div className={styles.postTop}>
+                      <div className={styles.authorGroup}>
+                        <span className={styles.avatar} aria-hidden="true"><img src={item.avatar} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} /></span>
+                        <span><strong>{item.author}</strong><small>{item.handle}</small></span>
                       </div>
-                      <p className={styles.thought}>{item.thought}</p>
-                      <div className={styles.postActions}>
-                        <button type="button" className={likedPosts[item.id] ? styles.liked : ''} onClick={() => setLikedPosts(previous => ({ ...previous, [item.id]: !previous[item.id] }))} aria-label={`${item.author} の投稿にいいね`} aria-pressed={Boolean(likedPosts[item.id])}>
-                          <Heart size={12} fill={likedPosts[item.id] ? 'currentColor' : 'none'} /><span>{item.likes + (likedPosts[item.id] ? 1 : 0)}</span>
-                        </button>
-                        <span><MessageSquare size={12} />Autonomous reply</span>
-                      </div>
-                    </motion.article>
-                  ))}
-                </AnimatePresence>
+                      <span className={styles.postTag}>{item.tag}</span>
+                    </div>
+                    <p className={styles.thought}>{item.thought}</p>
+                    <div className={styles.postActions}>
+                      <button type="button" className={likedPosts[item.id] ? styles.liked : ''} onClick={() => setLikedPosts(previous => ({ ...previous, [item.id]: !previous[item.id] }))} aria-label={`${item.author} の投稿にいいね`} aria-pressed={Boolean(likedPosts[item.id])}>
+                        <Heart size={12} fill={likedPosts[item.id] ? 'currentColor' : 'none'} /><span>{item.likes + (likedPosts[item.id] ? 1 : 0)}</span>
+                      </button>
+                      <span><MessageSquare size={12} />Autonomous reply</span>
+                    </div>
+                  </article>
+                ))}
               </div>
             </div>
           </section>

@@ -75,7 +75,7 @@
 .streamHeader i { width: 6px; height: 6px; border-radius: 50%; background: #c084fc; animation: pulse 1.7s cubic-bezier(0, 0, .2, 1) infinite; }
 .feedWindow { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 380px; overflow: hidden; }
 .topFade { position: absolute; z-index: 2; top: 0; right: 0; left: 0; height: 64px; background: linear-gradient(to bottom, var(--home-bg), transparent); pointer-events: none; }
-.feedCards { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+.feedCards { visibility: hidden; flex: none; display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
 .feedCard { position: relative; flex: none; padding: 20px; border: 1px solid rgb(168 85 247 / 12%); border-radius: 16px; background: rgb(18 10 32 / 45%); backdrop-filter: blur(20px); transition: background .3s, border-color .3s, box-shadow .3s; }
 .feedCard:hover { border-color: rgb(192 132 252 / 30%); background: rgb(24 13 44 / 60%); box-shadow: 0 12px 30px -10px rgb(147 51 234 / 15%); }
 .postTop { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }

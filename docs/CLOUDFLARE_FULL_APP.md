@@ -64,6 +64,25 @@ npm run deploy:worker
 
 PagesのGitHubビルドコマンドは `npm ci --prefix frontend && npm run build:cloudflare`、出力は `frontend/out`、本番ブランチは `codex/celebrity-experience` です。Workersは `npm run deploy:worker` で更新します（現段階ではPagesのPushだけではAPIコードは更新されません）。Workerのビルドにはbackendの依存関係も必要です。
 
+### GitHub Pushで本番に反映される範囲
+
+- `codex/celebrity-experience` にコミットをPushすると、接続済みPagesの自動ビルドが成功した後に画面が本番へ反映される。ローカルで編集しただけの未コミット・未Pushの変更は反映されない。
+- 別ブランチへのPushは本番更新にならない。設定次第では別の公開プレビューURLが生成されるため、非公開の作業場所だと思い込まない。
+- API・AI生成・定期処理はWorkerのデプロイ、DB構造変更はD1のマイグレーションが別途必要。Pushだけですべてが更新される構成ではない。
+- 自動公開を無効にした場合やビルドが失敗した場合は、Pushしても本番画面は更新されない。
+
+参考: [Cloudflareのブランチ公開制御](https://developers.cloudflare.com/pages/configuration/branch-build-controls/)。
+
+### 一時的な非公開と再開（未実施）
+
+データやプロジェクトを削除せず、一時的にアクセスを拒否し、後で解除して再開する運用は可能。2026年10月18日の相談では説明・記録のみを行い、設定変更はしない。
+
+- 管理者だけ閲覧できる状態ならCloudflare Accessで許可する利用者を絞る。誰も閲覧できない状態なら全員を拒否する設定を検討する。
+- Pagesの標準Access設定はそのままではプレビューURLのみを保護する。本番 `soloverse.pages.dev` と `*.soloverse.pages.dev` の両方を保護し、旧プロジェクトの本番・過去のデプロイURLも確認する。手順は[本番pages.devをAccessで保護する公式案内](https://developers.cloudflare.com/pages/platform/known-issues/#enable-access-on-your-pagesdev-domain)を参照。
+- APIは別の `workers.dev` URLを持つため、完全に利用を止める場合は既存のログイン済み利用者からのAPI接続も制限する。AI利用も止めたい場合は、Cronと生成待ちの処理も停止対象として確認する。
+- 自動ビルドの停止、新規登録の停止、`NEXT_PUBLIC_PRIVATE_APP` はサイト全体の閲覧禁止を意味しない。
+- 再開時はアクセス制限と停止した処理を戻し、本番・別名URL・APIで動作を確認する。DB・住人・投稿を初期化する必要はない。ただし、既に表示された画面やダウンロード済みの内容までは回収できない。
+
 画面だけへ戻す場合は `npm run build:cloudflare:preview`。APIの公開URLを変える場合は、ビルド時の `CLOUDFLARE_API_URL` とWorkerのCORS_ORIGIN/APP_URLを併せて設定します。
 
 DBの構造変更は新しいマイグレーションを追加して `npm run migrate:cloudflare` で適用します。`scripts/generate-d1-schema.cjs` は初期スキーマの生成用で、空の一時DBだけを読みます。既存DBへ初期マイグレーションを再適用しません。
