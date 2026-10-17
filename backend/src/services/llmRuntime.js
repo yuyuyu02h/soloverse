@@ -39,13 +39,17 @@ async function beforeAttempt(target, options, estimatedTokens) {
       AND ${activeGenerationSQL('rq.user_id')} AND datetime(scheduled_at)<=datetime('now','+3 minutes') LIMIT 1`);
     if (waiting.some(item => item.priority === 0) || replies.rows.length) throw new DeferredError('reply_priority');
   }
-  const usage = (await db.execute("SELECT COUNT(*) AS requests, COALESCE(SUM(tokens),0) AS tokens FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')")).rows[0];
+  // One read per target keeps a three-provider waterfall within the Worker query budget.
+  const usage = (await db.execute({ sql: `SELECT COUNT(*) AS requests, COALESCE(SUM(tokens),0) AS tokens,
+    (SELECT json_object('remaining_requests',remaining_requests,'remaining_tokens',remaining_tokens,
+      'reset_requests_at',reset_requests_at,'reset_tokens_at',reset_tokens_at)
+      FROM llm_provider_limits WHERE provider=? AND model=?) AS provider_limits
+    FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')`,
+    args: [target.providerName, target.model] })).rows[0];
   const fraction = isBackground ? 1 - cfg.replyReserve : 1;
   if (Number(usage.requests) >= Math.floor(cfg.dailyRequests * fraction)
     || Number(usage.tokens) + estimatedTokens > cfg.dailyTokens * fraction) throw new DeferredError('daily_budget');
-  const latest = (await db.execute({
-    sql: 'SELECT * FROM llm_provider_limits WHERE provider=? AND model=?', args: [target.providerName, target.model],
-  })).rows[0];
+  const latest = usage.provider_limits ? JSON.parse(usage.provider_limits) : null;
   const resets = latest ? [
     latest.remaining_requests === 0 && latest.reset_requests_at,
     latest.remaining_tokens != null && latest.remaining_tokens < estimatedTokens && latest.reset_tokens_at,

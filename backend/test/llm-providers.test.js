@@ -29,6 +29,14 @@ const mockServer = http.createServer((req, res) => {
       res.writeHead(503, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ error: { message: 'test unavailable' } }));
     }
+    if (body.model.endsWith('-timeout')) {
+      setTimeout(() => { if (!res.destroyed) res.end('{}'); }, 1500);
+      return;
+    }
+    if (body.model === 'gemini-ok') {
+      return res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:'Gemini成功'}}]}));
+    }
+
     if (body.model === 'empty-response') {
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ choices: [{ finish_reason: 'length', message: { content: '' } }], usage: { completion_tokens: 120 } }));
@@ -130,4 +138,25 @@ test('APIキーが一つもなければ明示的に失敗する', async () => {
 
   assert.equal(isLLMConfigured(), false);
   await assert.rejects(() => callLLM('', 'test'), /LLM APIキーが設定されていません/);
+});
+
+
+test('Groqのタイムアウト後にGeminiが成功すればOpenRouterは呼ばない',async()=>{
+ const {callLLM}=require('../src/services/llm');
+ Object.assign(process.env,{GROQ_API_KEY:'groq-test-key',GEMINI_API_KEY:'gemini-test-key',OPENROUTER_API_KEY:'openrouter-test-key',GROQ_MODELS:'groq-timeout',GEMINI_MODELS:'gemini-ok',OPENROUTER_MODELS:'openrouter-ok',LLM_REQUEST_TIMEOUT_MS:'1000'});
+ calls.length=0;
+ try{
+  assert.equal(await callLLM('','fictional',64),'Gemini成功');
+  assert.deepEqual(calls.map(c=>c.body.model),['groq-timeout','gemini-ok']);
+ }finally{process.env.LLM_REQUEST_TIMEOUT_MS='2000';}
+});
+
+test('最初の2社がタイムアウトしても3社目へ到達する',async()=>{
+ const {callLLM}=require('../src/services/llm');
+ Object.assign(process.env,{GROQ_API_KEY:'groq-test-key',GEMINI_API_KEY:'gemini-test-key',OPENROUTER_API_KEY:'openrouter-test-key',GROQ_MODELS:'groq-second-timeout',GEMINI_MODELS:'gemini-second-timeout',OPENROUTER_MODELS:'openrouter-ok',LLM_REQUEST_TIMEOUT_MS:'1000'});
+ calls.length=0;
+ try{
+  assert.equal(await callLLM('','fictional',64),'OpenRouter成功');
+  assert.deepEqual(calls.map(c=>c.body.model),['groq-second-timeout','gemini-second-timeout','openrouter-ok']);
+ }finally{process.env.LLM_REQUEST_TIMEOUT_MS='2000';}
 });

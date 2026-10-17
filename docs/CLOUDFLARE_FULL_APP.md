@@ -19,11 +19,11 @@ Workers本番はPBKDF2を一度に10万回までしか処理できず、60万回
 Cloudflareダッシュボード → Workers & Pages → `soloverse-api` → Settings → Variables and Secrets → Add。
 
 - Type: **Secret**
-- Name: **GROQ_API_KEY**
-- Value: 自分のGroq APIキー
+- Name: **GROQ_API_KEY** / **GEMINI_API_KEY** / **OPENROUTER_API_KEY**（それぞれ別のSecret）
+- Value: 各社で発行した自分のAPIキー
 - 保存・Deployまで実行
 
-キーをチャット・GitHub・Pagesの環境変数・NEXT_PUBLIC_変数に貼らないでください。今回はGroqだけを使用し、Gemini/OpenRouterへの自動切り替えは有効にしません。月額0円を保つにはGroq側もFreeプランであることを確認します。アプリの回数制限は、有料プランの契約そのものを無料に変更する機能ではありません。
+キーをチャット・GitHub・Pagesの環境変数・NEXT_PUBLIC_変数に貼らないでください。接続順はGroq → Gemini → OpenRouterです。各社のキーを登録した接続先だけが対象になります。月額0円を保つにはGroq・GeminiのAPIプロジェクトで無料枠を使用し、OpenRouterは `openrouter/free` に固定します。アプリの回数制限は、有料プランの契約そのものを無料に変更する機能ではありません。
 
 JWT_SECRETとADMIN_USER_IDSはサーバー用Secretsです。初期値は `.private/cloudflare-server-secrets.json` へローカル保存し、Cloudflareへ登録します。AIキーはこのファイルに含めません。秘密値の登録後も `wrangler deploy` は既存Secretsを保持します。
 
@@ -78,3 +78,11 @@ Cloudflareローカル検証には `cloudflare/.dev.vars.example` を `.dev.vars
 Cloudflareの初期投稿は、候補の生成と、内容検査・公開を別リクエストで実行します。検査へ進む待機だけは画面が表示中なら自動で続きを取得し、利用枠待ちは指定時刻まで待機します。D1呼び出しとAI接続を合計45回以内に制限した検証でも、各段階の保存・公開・ロック解除が成功することをテストしています。
 
 世界を更新中の通常投稿は409で返し、本文を残して再試行を案内します。初期投稿の更新待ちは202です。更新ロックは通常の完了・例外時に解除し、異常終了時の期限は3分です。Worker間でリクエストの寿命をまたぐI/O待機キューを共有しません。ローカルサーバーの既存の直列キューは維持します。
+
+## Groq → Gemini → OpenRouterの切り替え
+
+公開用の設定は `LLM_PROVIDER_ORDER=groq,gemini,openrouter`、各社1モデルです。Geminiは `gemini-3.5-flash-lite`、OpenRouterは無料専用の `openrouter/free` を使います。Groqが成功した場合は後続へ送りません。提供元の枠不足、429、認証エラー、通信エラー、タイムアウト、空応答・不正JSONの場合は次へ進みます。全体の安全上限（日次100回・10万トークン）や利用者の非アクティブによる停止では会社を切り替えて上限を回避しません。全社が利用できなければ待機します。
+
+1社あたりの待機は最大18秒、全体60秒です。キー・モデル名は運用者が登録したものを使用し、初回公開時は各社の実接続を架空データで確認します。秘密キーをコードやMDへ書き込まず、CloudflareのWorker Secretsへ登録してください。キーの未登録や実モデルの制限により、3社すべてを使えるとは限りません。
+
+モデルと無料枠の確認先（2026-10-17）: [Gemini公式料金表](https://ai.google.dev/gemini-api/docs/pricing#gemini-3.5-flash-lite)、[OpenRouter Free Models](https://openrouter.ai/collections/free-models)。無料枠・利用可能モデルは各社側で変更されることがあります。

@@ -91,3 +91,38 @@ test('Cloudflare posting returns a retryable conflict during a world update, the
   assert.equal((await client.execute('SELECT COUNT(*) n FROM deployment_locks')).rows[0].n,0);
  }finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+
+test('three-provider waterfall stays within the Worker request budget and reviews through the surviving provider',async()=>{
+ await client.executeMultiple('DELETE FROM content_candidates; DELETE FROM content_pool_state; DELETE FROM posts; DELETE FROM llm_attempts; DELETE FROM llm_provider_limits;');
+ const savedFetch=global.fetch;
+ const saved={};
+ const settings={LLM_PROVIDER_ORDER:'groq,gemini,openrouter',GROQ_MODELS:'waterfall-groq',GEMINI_MODELS:'waterfall-gemini',OPENROUTER_MODELS:'openrouter/free',GEMINI_API_KEY:'fictional-gemini',OPENROUTER_API_KEY:'fictional-openrouter'};
+ for(const [key,value] of Object.entries(settings)){saved[key]=process.env[key];process.env[key]=value;}
+ const models=[];
+ global.fetch=async(url,options)=>{
+  const model=JSON.parse(options.body).model;models.push(model);
+  if(model==='waterfall-groq'||model==='waterfall-gemini'){
+   network++;
+   return new Response(JSON.stringify({error:{message:'fictional unavailable'}}),{status:model==='waterfall-groq'?429:503,headers:{'retry-after':'60'}});
+  }
+  return savedFetch(url,options);
+ };
+ try{
+  await request(async()=>assert.rejects(pipeline.seedEnhanced('owner'),e=>e.code==='LLM_DEFERRED'&&e.message==='initial_posts_review'));
+  assert.equal(network,3);
+  assert.deepEqual(models,['waterfall-groq','waterfall-gemini','openrouter/free']);
+  await request(async()=>assert.equal(await pipeline.seedEnhanced('owner'),4));
+  assert.equal(network,1);
+  assert.equal((await client.execute('SELECT COUNT(*) n FROM deployment_locks')).rows[0].n,0);
+  assert.equal((await client.execute('SELECT COUNT(*) n FROM posts')).rows[0].n,4);
+  process.env.LLM_DAILY_REQUEST_BUDGET='1';
+  const before=models.length;
+  await request(async()=>assert.rejects(require('../src/services/llm').callLLM('','fictional',64,{userId:'owner'}),e=>e.code==='LLM_DEFERRED'&&e.message==='daily_budget'));
+  assert.equal(models.length,before);
+ }finally{
+  delete process.env.LLM_DAILY_REQUEST_BUDGET;
+  global.fetch=savedFetch;
+  for(const key of Object.keys(settings)){if(saved[key]===undefined)delete process.env[key];else process.env[key]=saved[key];}
+ }
+});
