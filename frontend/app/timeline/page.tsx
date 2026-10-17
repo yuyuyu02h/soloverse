@@ -22,7 +22,6 @@ export default function TimelinePage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [postError, setPostError] = useState('');
-  const [postNotice, setPostNotice] = useState('');
   const [timelineError, setTimelineError] = useState('');
   const [seedWait, setSeedWait] = useState<{ retryAt?: string; reason?: string } | null>(null);
   const [retryReady, setRetryReady] = useState(true);
@@ -254,16 +253,12 @@ export default function TimelinePage() {
     if (!postText.trim() || posting) return;
     setPosting(true);
     setPostError('');
-    setPostNotice('');
     try {
       const data = await api.post('/api/timeline/post', { content: postText.trim() });
       setPostText('');
       if (data.post) {
         setPosts(prev => [data.post, ...prev]);
         // 自分の投稿で差分取得カーソルを進めると、直前のAI投稿を取り逃す。
-      }
-      if (data.scheduled?.directReply) {
-        setPostNotice(`AI住人への返信依頼を受け付けました。${data.scheduled.replyWithinMinutes || 3}分ほどで反応します。`);
       }
     } catch (e: unknown) {
       setPostError(e instanceof Error ? e.message : '投稿に失敗しました');
@@ -385,9 +380,6 @@ export default function TimelinePage() {
               {postError && (
                 <p style={{ color: '#e05555', fontSize: 12, margin: '2px 0 4px' }}>{postError}</p>
               )}
-              {postNotice && (
-                <p role="status" style={{ color: '#8ea1ff', fontSize: 12, margin: '2px 0 4px' }}>{postNotice}</p>
-              )}
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 borderTop: '1px solid #2f3336', paddingTop: 10, marginTop: 4,
@@ -487,7 +479,7 @@ export default function TimelinePage() {
         <TrendPanel
           onClose={() => setShowTrend(false)}
           onTrendClick={handleTrendClick}
-          onWorldRebuilt={async () => { historyRef.current = false; setHistoryMode(false); setReplyTarget(null); setPostText(''); setPostNotice(''); await initTimeline(); }}
+          onWorldRebuilt={async () => { historyRef.current = false; setHistoryMode(false); setReplyTarget(null); setPostText(''); await initTimeline(); }}
         />
       )}
     </div>
