@@ -19,7 +19,7 @@ async function residentContext(userId, char) {
     await db.execute({ sql: 'INSERT INTO resident_profiles(character_id,user_id,profile) VALUES(?,?,?) ON CONFLICT(character_id) DO UPDATE SET profile=excluded.profile', args: [char.id, userId, JSON.stringify(profile)] });
     row = { profile: JSON.stringify(profile) };
   }
-  const recent = (await db.execute({ sql: `SELECT p.id,p.content FROM posts p WHERE p.user_id=? AND p.theme_version=? AND
+  const recent = (await db.execute({ sql: `SELECT p.id,p.content FROM posts p WHERE p.user_id=? AND p.deleted_at IS NULL AND p.theme_version=? AND
     (p.author_id=? OR p.reply_to IN (SELECT id FROM posts WHERE user_id=? AND author_id=?))
     ORDER BY datetime(p.created_at) DESC,p.id DESC LIMIT 8`, args: [userId, settings?.theme_version || 1, char.id, userId, char.id] })).rows;
   const statements = [{ sql: 'DELETE FROM resident_memory WHERE user_id=? AND character_id=?', args: [userId, char.id] }];
@@ -36,7 +36,7 @@ async function residentContexts(userId, characters, settings) {
     return new Map(await Promise.all(characters.map(async c => [c.id, await residentContext(userId,c)])));
   }
   const rows = (await db.execute({sql:`SELECT c.id,r.profile,
-    (SELECT json_group_array(content) FROM (SELECT p.content FROM posts p WHERE p.user_id=c.user_id AND p.theme_version=? AND (p.author_id=c.id OR p.reply_to IN (SELECT id FROM posts WHERE user_id=c.user_id AND author_id=c.id)) ORDER BY datetime(p.created_at) DESC,p.id DESC LIMIT 8)) AS memory
+    (SELECT json_group_array(content) FROM (SELECT p.content FROM posts p WHERE p.user_id=c.user_id AND p.deleted_at IS NULL AND p.theme_version=? AND (p.author_id=c.id OR p.reply_to IN (SELECT id FROM posts WHERE user_id=c.user_id AND author_id=c.id)) ORDER BY datetime(p.created_at) DESC,p.id DESC LIMIT 8)) AS memory
     FROM ai_characters c LEFT JOIN resident_profiles r ON r.character_id=c.id AND r.user_id=c.user_id WHERE c.user_id=? AND c.id IN (SELECT value FROM json_each(?))`,args:[settings.theme_version,userId,JSON.stringify(characters.map(c=>c.id))]})).rows;
   const contexts = new Map();
   const profiles = [];

@@ -16,7 +16,7 @@ async function world(userId) {
   const settings = await themeState(userId);
   const [residents, recent, pending] = await Promise.all([
     db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id=? AND ${currentVersion('c')} ORDER BY id`, args: [userId] }),
-    db.execute({ sql: `SELECT id,author_id,content,reply_to FROM posts p WHERE user_id=? AND ${currentVersion('p')} ORDER BY datetime(created_at) DESC LIMIT 50`, args: [userId] }),
+    db.execute({ sql: `SELECT id,author_id,content,reply_to FROM posts p WHERE user_id=? AND deleted_at IS NULL AND ${currentVersion('p')} ORDER BY datetime(created_at) DESC LIMIT 50`, args: [userId] }),
     db.execute({ sql: `SELECT content FROM content_candidates c WHERE user_id=? AND ${currentVersion('c')} AND state='pending'`, args: [userId] }),
   ]);
   return { settings, residents: residents.rows, recent: recent.rows, history: [...recent.rows, ...pending.rows].map(p => p.content) };
@@ -231,7 +231,7 @@ async function publishPool(userId) {
   for (const row of rows) {
     if (row.state !== 'pending') continue;
     const char = residents ? residents.find(c=>c.id===row.character_id) : (await db.execute({ sql: 'SELECT * FROM ai_characters WHERE id=? AND user_id=? AND theme_version=?', args: [row.character_id, userId, settings.theme_version] })).rows[0];
-    const parent = row.parent_id ? (await db.execute({ sql: 'SELECT id,content FROM posts WHERE id=? AND user_id=? AND theme_version=?', args: [row.parent_id, userId, settings.theme_version] })).rows[0] : null;
+    const parent = row.parent_id ? (await db.execute({ sql: 'SELECT id,content FROM posts WHERE id=? AND user_id=? AND theme_version=? AND deleted_at IS NULL', args: [row.parent_id, userId, settings.theme_version] })).rows[0] : null;
     if (!char || (row.parent_id && !parent)) {
       const pendingParent = row.parent_id && (await db.execute({ sql: "SELECT id FROM content_candidates WHERE id=? AND user_id=? AND state='pending'", args: [row.parent_id, userId] })).rows.length;
       if (pendingParent) continue;

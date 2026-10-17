@@ -4,7 +4,7 @@
   "scripts": {
     "build:cloudflare": "node scripts/build-cloudflare.cjs --full",
     "preview:cloudflare": "wrangler pages dev frontend/out --port 8787",
-    "deploy:cloudflare": "npm run build:cloudflare && wrangler pages deploy frontend/out --project-name soloverse-preview",
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler pages deploy frontend/out --project-name soloverse",
     "build:cloudflare:preview": "node scripts/build-cloudflare.cjs",
     "build:worker": "node cloudflare/build-worker.cjs",
     "dev:worker": "wrangler dev --config cloudflare/wrangler.jsonc",

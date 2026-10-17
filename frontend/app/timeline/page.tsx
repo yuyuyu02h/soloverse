@@ -161,7 +161,8 @@ export default function TimelinePage() {
         }
         if (!mountedRef.current || epoch !== epochRef.current) return;
         if (data.themeVersion !== themeVersionRef.current) { void initTimeline(); return; }
-        setPosts(prev => mergePosts(refreshed, prev));
+        const refreshedIds = new Set(visible.map(post => post.id));
+        setPosts(prev => mergePosts(refreshed, prev.filter(post => !refreshedIds.has(post.id))));
 
         if (data.posts && data.posts.length > 0) {
           const incoming = data.posts as Post[];
@@ -270,6 +271,20 @@ export default function TimelinePage() {
   const handleLike = async (postId: string): Promise<boolean> => {
     const result = await api.post('/api/timeline/like/' + postId, {});
     return Boolean(result.liked);
+  };
+
+  const handlePostDeleted = async () => {
+    const epoch = epochRef.current;
+    const visible = postsRef.current;
+    const refreshed: Post[] = [];
+    for (let index = 0; index < visible.length; index += 100) {
+      const data = await api.get('/api/timeline?ids=' + encodeURIComponent(visible.slice(index, index + 100).map(post => post.id).join(',')) + (historyRef.current ? '&history=true' : ''));
+      refreshed.push(...data.posts);
+    }
+    if (!mountedRef.current || epoch !== epochRef.current) return;
+    const ids = new Set(visible.map(post => post.id));
+    setPosts(previous => mergePosts(refreshed, previous.filter(post => !ids.has(post.id))));
+    setReplyTarget(previous => previous ? refreshed.find(post => post.id === previous.id) || null : null);
   };
 
   const handleReplySent = async (postId: string) => {
@@ -442,6 +457,8 @@ export default function TimelinePage() {
             post={post}
             onLike={handleLike}
             onOpenReplies={setReplyTarget}
+            currentUserId={user.userId}
+            onDeleted={handlePostDeleted}
             highlight={newPostIds.has(post.id)}
           />
         ))}
@@ -467,6 +484,7 @@ export default function TimelinePage() {
           onClose={() => setReplyTarget(null)}
           currentUser={user}
           onReplySent={() => handleReplySent(replyTarget.id)}
+          onPostDeleted={handlePostDeleted}
         />
       )}
       {showNotif && (

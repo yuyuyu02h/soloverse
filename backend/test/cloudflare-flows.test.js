@@ -20,7 +20,7 @@ async function request(task) {
  },{waitUntil(){}});
  assert.ok(trace.length+network<=45, `subrequests=${trace.length+network}`);
 }
-test.before(async()=>{await client.execute('PRAGMA foreign_keys=ON');for(const f of ['0001_initial.sql','0002_seed_wait.sql'])await client.executeMultiple(fs.readFileSync(path.join(__dirname,'../../cloudflare/migrations',f),'utf8'));
+test.before(async()=>{await client.execute('PRAGMA foreign_keys=ON');for(const f of ['0001_initial.sql','0002_seed_wait.sql','0003_post_deletion_mentions.sql'])await client.executeMultiple(fs.readFileSync(path.join(__dirname,'../../cloudflare/migrations',f),'utf8'));
 await client.execute("INSERT INTO users(id,email,password_hash,username,onboarding_done) VALUES('owner','owner@test.invalid','unused','owner',1)");await client.execute("INSERT INTO world_settings VALUES('owner','admired','映画俳優','calm','','large')");await client.execute({sql:'INSERT INTO generation_sessions VALUES(?,?,?,NULL)',args:['s','owner',Date.now()+300000]});for(let i=0;i<10;i++)await client.execute({sql:"INSERT INTO ai_characters(id,user_id,name,username,avatar_seed,personality,interests,reply_style,reaction_frequency,delay_profile) VALUES(?,'owner','住人',?,'seed','映画を楽しむ','映画','短い','mid','normal')",args:['c'+i,'resident_'+i]});
 });
 test.after(()=>{global.fetch=originalFetch;client.close();fs.rmSync(dir,{recursive:true,force:true});});

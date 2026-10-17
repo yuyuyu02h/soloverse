@@ -14,8 +14,8 @@
   "vars": {
     "SOLOVERSE_RUNTIME": "cloudflare",
     "NODE_ENV": "production",
-    "CORS_ORIGIN": "https://soloverse-preview.pages.dev",
-    "APP_URL": "https://soloverse-preview.pages.dev",
+    "CORS_ORIGIN": "https://soloverse.pages.dev,https://soloverse-preview.pages.dev",
+    "APP_URL": "https://soloverse.pages.dev",
     "TRUST_PROXY": "true",
     "REGISTRATION_CLOSED": "true",
     "DEMO_RESET_USER_IDS": "58b3305a-75bf-4914-bd6a-9a5b11852a6f",

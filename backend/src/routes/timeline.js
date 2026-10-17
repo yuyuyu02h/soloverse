@@ -44,7 +44,7 @@ router.get('/', authenticate, async (req, res) => {
               CASE WHEN p.author_type = 'ai' THEN ac.avatar_seed ELSE NULL END as avatar_seed,
               CASE WHEN p.author_type = 'ai' THEN ac.personality ELSE NULL END as personality,
               (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-              (SELECT COUNT(*) FROM posts WHERE reply_to = p.id) as reply_count,
+              (SELECT COUNT(*) FROM posts r WHERE r.reply_to=p.id AND (r.deleted_at IS NULL OR EXISTS (SELECT 1 FROM posts child WHERE child.reply_to=r.id AND child.user_id=r.user_id))) as reply_count,
               (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND liker_id = ?) as user_liked
             FROM posts p
             LEFT JOIN ai_characters ac ON p.author_type = 'ai'  AND p.author_id = ac.id
@@ -60,7 +60,7 @@ router.get('/', authenticate, async (req, res) => {
               CASE WHEN p.author_type = 'ai' THEN ac.avatar_seed ELSE NULL END as avatar_seed,
               CASE WHEN p.author_type = 'ai' THEN ac.personality ELSE NULL END as personality,
               (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-              (SELECT COUNT(*) FROM posts WHERE reply_to = p.id) as reply_count,
+              (SELECT COUNT(*) FROM posts r WHERE r.reply_to=p.id AND (r.deleted_at IS NULL OR EXISTS (SELECT 1 FROM posts child WHERE child.reply_to=r.id AND child.user_id=r.user_id))) as reply_count,
               (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND liker_id = ?) as user_liked
             FROM posts p
             LEFT JOIN ai_characters ac ON p.author_type = 'ai'  AND p.author_id = ac.id
@@ -85,6 +85,7 @@ router.get('/', authenticate, async (req, res) => {
          ORDER BY datetime(p.created_at) DESC, p.id DESC LIMIT ?`;
       args = [userId, userId, String(req.query.before), String(req.query.before), String(req.query.beforeId), limit];
     }
+    sql = sql.replace('WHERE p.user_id = ?', `WHERE p.user_id = ? AND (p.deleted_at IS NULL OR EXISTS (SELECT 1 FROM posts child WHERE child.user_id=p.user_id AND child.reply_to=p.id) OR EXISTS (SELECT 1 FROM celebrity_comments c WHERE c.scene_post_id=p.id AND c.user_id=p.user_id))`);
     if (req.query.history !== 'true') sql = sql.replace('WHERE p.user_id = ?', `WHERE p.user_id = ? AND ${currentVersion('p')}`);
     const posts = await db.execute({ sql, args });
     const decoratedPosts = await decorateTimelinePosts(userId, posts.rows);
@@ -104,7 +105,7 @@ router.get('/', authenticate, async (req, res) => {
         ROW_NUMBER() OVER(PARTITION BY p.reply_to ORDER BY datetime(p.created_at) DESC,p.id DESC) AS preview_rank
         FROM posts p LEFT JOIN ai_characters ac ON p.author_type='ai' AND p.author_id=ac.id
         LEFT JOIN users u ON p.author_type='user' AND p.author_id=u.id
-        WHERE p.user_id=? AND p.reply_to IN (SELECT value FROM json_each(?))) WHERE preview_rank<=2`,
+        WHERE p.user_id=? AND (p.deleted_at IS NULL OR EXISTS (SELECT 1 FROM posts child WHERE child.reply_to=p.id AND child.user_id=p.user_id)) AND p.reply_to IN (SELECT value FROM json_each(?))) WHERE preview_rank<=2`,
       args:[userId,userId,JSON.stringify(postIds)],
     })).rows : [];
     for (const pid of postIds) {
@@ -141,7 +142,7 @@ router.post('/post', authenticate, async (req, res) => {
       const version = settings?.theme_version || 1;
       if (replyTo) {
         const target = await db.execute({
-          sql: 'SELECT id,theme_version FROM posts WHERE id = ? AND user_id = ?',
+          sql: 'SELECT id,theme_version FROM posts WHERE id = ? AND user_id = ? AND deleted_at IS NULL',
           args: [replyTo, userId],
         });
         if (!target.rows.length) return res.status(404).json({ error: '返信先の投稿が見つかりません' });
@@ -167,6 +168,7 @@ router.post('/post', authenticate, async (req, res) => {
         try {
           if (mode === 'celebrity') {
             scheduled = await createCelebrityScene(userId, postId, content.trim(), createdAt);
+            await scheduleReactions(userId, postId, content.trim());
             initialLikeCount = scheduled.likeCount;
             initialReplyCount = scheduled.commentCount;
           } else {
@@ -202,13 +204,39 @@ router.post('/post', authenticate, async (req, res) => {
   }
 });
 
+// Erase only the owner's text. Keep a tombstone so existing replies stay connected.
+router.delete('/post/:postId', authenticate, async (req, res) => {
+  try {
+    return await serializeWorldTask(req.userId, async () => {
+      const post = (await db.execute({ sql: 'SELECT author_id,author_type,deleted_at FROM posts WHERE id=? AND user_id=?', args: [req.params.postId,req.userId] })).rows[0];
+      if (!post) return res.status(404).json({ error: '投稿が見つかりません' });
+      if (post.author_type !== 'user' || post.author_id !== req.userId) return res.status(403).json({ error: '自分の投稿のみ削除できます' });
+      if (!post.deleted_at) await db.batch([
+        { sql: 'UPDATE posts SET content=\'\',deleted_at=? WHERE id=? AND user_id=? AND author_id=? AND author_type=\'user\'', args: [new Date().toISOString(),req.params.postId,req.userId,req.userId] },
+        { sql: 'UPDATE reaction_queue SET done=1 WHERE post_id=? AND user_id=?', args: [req.params.postId,req.userId] },
+        { sql: "UPDATE content_candidates SET state='discarded' WHERE parent_id=? AND user_id=? AND state='pending'", args: [req.params.postId,req.userId] },
+        { sql: 'DELETE FROM likes WHERE post_id=? AND user_id=?', args: [req.params.postId,req.userId] },
+        { sql: 'DELETE FROM notifications WHERE post_id=? AND user_id=?', args: [req.params.postId,req.userId] },
+        { sql: 'DELETE FROM resident_memory WHERE post_id=? AND user_id=?', args: [req.params.postId,req.userId] },
+        { sql: "UPDATE celebrity_scenes SET status='ready' WHERE post_id=? AND user_id=?", args: [req.params.postId,req.userId] },
+        { sql: "DELETE FROM celebrity_comments WHERE scene_post_id=? AND user_id=? AND datetime(created_at)>datetime('now')", args: [req.params.postId,req.userId] },
+      ], 'write');
+      res.json({ success: true, postId: req.params.postId });
+    });
+  } catch (error) {
+    if (error.code === 'WORLD_BUSY') return res.status(409).json({ error: error.message, code: error.code });
+    console.error('Delete post error:', error.message);
+    res.status(500).json({ error: '投稿を削除できませんでした' });
+  }
+});
+
 // ─── いいね ────────────────────────────────────────────
 router.post('/like/:postId', authenticate, async (req, res) => {
   const userId = req.userId;
   const { postId } = req.params;
   try {
     const target = await db.execute({
-      sql: 'SELECT id FROM posts WHERE id = ? AND user_id = ?', args: [postId, userId],
+      sql: 'SELECT id FROM posts WHERE id = ? AND user_id = ? AND deleted_at IS NULL', args: [postId, userId],
     });
     if (!target.rows.length) return res.status(404).json({ error: '投稿が見つかりません' });
 
@@ -244,7 +272,7 @@ router.get('/replies/:postId', authenticate, async (req, res) => {
               UNION ALL
               SELECT child.id, thread.depth + 1
               FROM posts child JOIN thread ON child.reply_to = thread.id
-              WHERE child.user_id = ? AND thread.depth < 20
+            WHERE child.user_id = ? AND thread.depth < 20
             )
             SELECT p.*,
               thread.depth,
@@ -256,6 +284,7 @@ router.get('/replies/:postId', authenticate, async (req, res) => {
             FROM thread JOIN posts p ON p.id = thread.id
             LEFT JOIN ai_characters ac ON p.author_type = 'ai'  AND p.author_id = ac.id
             LEFT JOIN users u          ON p.author_type = 'user' AND p.author_id = u.id
+            WHERE p.deleted_at IS NULL OR EXISTS (SELECT 1 FROM posts child WHERE child.reply_to=p.id AND child.user_id=p.user_id)
             ORDER BY datetime(p.created_at) ASC, thread.depth ASC, p.id ASC`,
       args: [postId, userId, userId, userId],
     });

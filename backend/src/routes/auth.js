@@ -10,38 +10,25 @@ const { resetsOnLogout, resetDemoWorld } = require('../services/demoReset');
 
 const router = express.Router();
 
-// シンプルなインメモリレートリミッター（express-rate-limitなしで実装）
-const loginAttempts = new Map(); // key: IP, value: { count, resetAt }
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15分
-const RATE_LIMIT_MAX = 10; // 15分に10回まで
-
+// Keep production brute-force protection; local presentation account switches are unlimited.
 async function checkRateLimit(ip) {
-  if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') {
-    const { createHash } = require('node:crypto');
-    const key = createHash('sha256').update(String(ip)).digest('hex');
-    const now = Date.now();
-    const result = await db.execute({ sql: `INSERT INTO login_rate_limits(key,count,reset_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=CASE WHEN reset_at<=? THEN 1 ELSE count+1 END,reset_at=CASE WHEN reset_at<=? THEN excluded.reset_at ELSE reset_at END RETURNING count`, args: [key, now+RATE_LIMIT_WINDOW,now,now] });
-    return result.rows[0].count <= RATE_LIMIT_MAX;
-  }
+  if (process.env.SOLOVERSE_RUNTIME !== 'cloudflare') return true;
+  const { createHash } = require('node:crypto');
+  const key = createHash('sha256').update(String(ip)).digest('hex');
   const now = Date.now();
-  const record = loginAttempts.get(ip);
-  if (!record || now > record.resetAt) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
-    return true;
-  }
-  if (record.count >= RATE_LIMIT_MAX) return false;
-  record.count++;
-  return true;
+  const result = await db.execute({
+    sql: `INSERT INTO login_rate_limits(key,count,reset_at) VALUES(?,1,?)
+      ON CONFLICT(key) DO UPDATE SET count=CASE WHEN reset_at<=? THEN 1 ELSE count+1 END,
+      reset_at=CASE WHEN reset_at<=? THEN excluded.reset_at ELSE reset_at END RETURNING count`,
+    args: [key, now + 15 * 60000, now, now],
+  });
+  return result.rows[0].count <= 10;
 }
 
 // 新規登録
 router.post('/register', async (req, res) => {
   if (process.env.REGISTRATION_CLOSED === 'true') return res.status(403).json({ error: 'このサイトは個人利用専用です。新規登録は受け付けていません。' });
-  const ip = req.ip || req.connection.remoteAddress;
-  if (!await checkRateLimit(ip)) {
-    return res.status(429).json({ error: 'リクエストが多すぎます。15分後に再試行してください。' });
-  }
-
+  if (!await checkRateLimit(req.ip || req.connection.remoteAddress)) return res.status(429).json({ error: 'リクエストが多すぎます。15分後に再試行してください。' });
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   const password = typeof req.body.password === 'string' ? req.body.password : '';
   const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
@@ -81,11 +68,7 @@ router.post('/register', async (req, res) => {
 
 // ログイン
 async function login(req, res, adminLogin = false) {
-  const ip = req.ip || req.connection.remoteAddress;
-  if (!await checkRateLimit(ip)) {
-    return res.status(429).json({ error: 'リクエストが多すぎます。15分後に再試行してください。' });
-  }
-
+  if (!await checkRateLimit(req.ip || req.connection.remoteAddress)) return res.status(429).json({ error: 'リクエストが多すぎます。15分後に再試行してください。' });
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   const password = typeof req.body.password === 'string' ? req.body.password : '';
   if (!email || !password) {

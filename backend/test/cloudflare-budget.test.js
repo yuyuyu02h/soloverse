@@ -89,7 +89,7 @@ async function clearWorld() {
 }
 test.before(async () => {
   await client.execute('PRAGMA foreign_keys=ON');
-  for (const f of ['0001_initial.sql', '0002_seed_wait.sql']) await client.executeMultiple(fs.readFileSync(path.join(__dirname, '../../cloudflare/migrations', f), 'utf8'));
+  for (const f of ['0001_initial.sql', '0002_seed_wait.sql', '0003_post_deletion_mentions.sql']) await client.executeMultiple(fs.readFileSync(path.join(__dirname, '../../cloudflare/migrations', f), 'utf8'));
   await client.execute("INSERT INTO users(id,email,password_hash,username,onboarding_done) VALUES('owner','owner@test.invalid','unused','owner',1)");
   await client.execute("INSERT INTO world_settings VALUES('owner','admired','映画俳優','calm','','large')");
   await client.execute({ sql: 'INSERT INTO generation_sessions VALUES(?,?,?,NULL)', args: ['s', 'owner', Date.now() + 300000] });

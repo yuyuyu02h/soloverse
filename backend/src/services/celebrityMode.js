@@ -199,22 +199,26 @@ JSONのみ:
 }
 
 async function saveDirectorResult(scene, director, status) {
-  const rows = commentRows(scene, director);
-  const statements = [
-    { sql: 'DELETE FROM celebrity_comments WHERE scene_post_id=? AND user_id=?', args: [scene.post_id, scene.user_id] },
-    ...rows.map(row => ({
-      sql: `INSERT INTO celebrity_comments
-            (id,scene_post_id,user_id,author_name,author_handle,avatar_seed,content,category,like_count,created_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?)`,
-      args: [row.id, scene.post_id, scene.user_id, row.name, row.handle, row.avatarSeed, row.content, row.category, row.likeCount, row.createdAt],
-    })),
-    {
-      sql: `UPDATE celebrity_scenes SET mood=?,reaction_mix=?,status=?,ready_at=?
-            WHERE post_id=? AND user_id=? AND status='pending'`,
-      args: [director.mood, JSON.stringify(director.reactionMix), status, new Date().toISOString(), scene.post_id, scene.user_id],
-    },
-  ];
-  await db.batch(statements, 'write');
+  return require('./worldTasks').serializeWorldTask(scene.user_id, async () => {
+    const live = (await db.execute({ sql: 'SELECT 1 FROM posts WHERE id=? AND user_id=? AND deleted_at IS NULL', args: [scene.post_id,scene.user_id] })).rows.length;
+    if (!live) return;
+    const rows = commentRows(scene, director);
+    const statements = [
+      { sql: 'DELETE FROM celebrity_comments WHERE scene_post_id=? AND user_id=?', args: [scene.post_id, scene.user_id] },
+      ...rows.map(row => ({
+        sql: `INSERT INTO celebrity_comments
+              (id,scene_post_id,user_id,author_name,author_handle,avatar_seed,content,category,like_count,created_at)
+              VALUES(?,?,?,?,?,?,?,?,?,?)`,
+        args: [row.id, scene.post_id, scene.user_id, row.name, row.handle, row.avatarSeed, row.content, row.category, row.likeCount, row.createdAt],
+      })),
+      {
+        sql: `UPDATE celebrity_scenes SET mood=?,reaction_mix=?,status=?,ready_at=?
+              WHERE post_id=? AND user_id=? AND status='pending'`,
+        args: [director.mood, JSON.stringify(director.reactionMix), status, new Date().toISOString(), scene.post_id, scene.user_id],
+      },
+    ];
+    await db.batch(statements, 'write');
+  });
 }
 
 async function processPendingCelebrityScenes(limit = 3) {
@@ -223,7 +227,7 @@ async function processPendingCelebrityScenes(limit = 3) {
           FROM celebrity_scenes s
           JOIN posts p ON p.id=s.post_id AND p.user_id=s.user_id
           JOIN world_settings w ON w.user_id=s.user_id
-          WHERE s.status='pending' AND w.position='admired'
+          WHERE s.status='pending' AND w.position='admired' AND p.deleted_at IS NULL
             AND ${activeGenerationSQL('s.user_id')}
             AND ${currentVersion('p')}
           ORDER BY datetime(s.started_at) ASC LIMIT ?`,
@@ -261,6 +265,7 @@ async function decorateTimelinePosts(userId, posts, now = Date.now()) {
   return posts.map(post => {
     const scene = byPost.get(post.id);
     if (!scene) return post;
+    if (post.deleted_at) return { ...post, experience_mode: 'celebrity', celebrity_status: 'ready', like_count: 0, reply_count: Number(post.reply_count || 0) + (visible.get(post.id) || 0) };
     const counts = sceneCounts(scene, now);
     return {
       ...post,
