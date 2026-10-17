@@ -36,3 +36,4 @@ frontend/out/
 .dev.vars.*
 !.dev.vars.example
 cloudflare/dist/
+cloudflare/legacy-redirect/out/

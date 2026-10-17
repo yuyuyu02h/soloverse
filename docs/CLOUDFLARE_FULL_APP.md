@@ -23,6 +23,12 @@ Workers本番はPBKDF2を一度に10万回までしか処理できず、60万回
 
 2026年10月18日の追加機能は、@指定の返信優先・自分の投稿削除・スレッド内の区切り線調整です。Workersの更新前にD1へ `0003_post_deletion_mentions.sql` を適用します。ローカルDBは起動時に必要な列を追加します。Pagesのプロジェクト名は `soloverse`、Workerの接続許可は新URLと移行元URLを含め、`APP_URL` は新URLにします。
 
+### 公開URLの移行
+
+本体は `soloverse.pages.dev`。Pagesのプロジェクト名変更だけでは既存のサブドメインは変わらないため、新しい `soloverse` プロジェクトを同じGitHubリポジトリと本番ブランチへ接続します。API・D1・アカウントは共通で、再作成しません。
+
+旧 `soloverse-preview` プロジェクトは削除せず、`cloudflare/legacy-redirect` をルート、`node build.cjs` をビルドコマンド、`out` を出力先とする転送専用サイトにします。旧URLの各パスを新URLの同じパスへ301転送します。旧URLを開いたままの画面にも対応できるよう、APIのCORSは移行元と移行先の両方を許可します。ドメインが変わるため、新URLでは同じアカウントで再ログインが必要です。
+
 ## APIキー（ユーザーが設定）
 
 Cloudflareダッシュボード → Workers & Pages → `soloverse-api` → Settings → Variables and Secrets → Add。
