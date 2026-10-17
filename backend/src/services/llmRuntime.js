@@ -30,6 +30,8 @@ async function drain() {
   finally { active = false; drain(); }
 }
 async function beforeAttempt(target, options, estimatedTokens) {
+  // Include admission, result accounting and fallback bookkeeping before sending.
+  db?.requireQueryBudget?.(8);
   if (options.userId && !await isGenerationActive(options.userId)) throw new DeferredError('user_inactive');
   if (!enabled() || !db) return null;
   const cfg = config();

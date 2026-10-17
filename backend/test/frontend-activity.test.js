@@ -97,6 +97,19 @@ test('an old account request failing after a switch cannot clear the new account
   assert.equal(page.window.location.href, '/timeline');
 });
 
+test('temporary authentication/database failure keeps credentials and allows recovery without login', async () => {
+  let unavailable = true;
+  const page = browser(async () => unavailable
+    ? new Response(JSON.stringify({ error: '一時的なDB障害', code: 'AUTH_UNAVAILABLE' }), { status: 503 })
+    : new Response(JSON.stringify({ userId: 'A', username: 'A' })));
+  page.setToken('account-A'); page.setUser({ userId: 'A', username: 'A' });
+  await assert.rejects(page.api.get('/api/auth/me'), /一時的なDB障害/);
+  assert.equal(page.getToken(), 'account-A'); assert.equal(page.getUser().userId, 'A');
+  assert.equal(page.window.location.href, '/timeline');
+  unavailable = false;
+  assert.equal((await page.api.get('/api/auth/me')).userId, 'A');
+});
+
 test('switching accounts in another tab discards the previous page state', async () => {
   const page = browser(); page.mount();
   const event = new Event('storage');

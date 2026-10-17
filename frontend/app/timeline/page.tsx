@@ -14,6 +14,8 @@ import { SCREEN_PREVIEW } from '../../lib/deployment';
 export default function TimelinePage() {
   const router = useRouter();
   const [user, setUser] = useState<{ userId: string; username: string; resetOnLogout?: boolean } | null>(null);
+  const [sessionError, setSessionError] = useState('');
+  const [sessionRetry, setSessionRetry] = useState(0);
   const [posts, setPosts] = useState<Post[]>([]);
   const [postText, setPostText] = useState('');
   const [posting, setPosting] = useState(false);
@@ -72,13 +74,15 @@ export default function TimelinePage() {
       setUser(u);
       saveUser(u);
       initTimeline();
-    }).catch(() => { if (!cancelled) router.replace('/'); });
+    }).catch(error => {
+      if (!cancelled) setSessionError(error instanceof Error ? error.message : 'ログイン状態を確認できません。少し待って再試行してください。');
+    });
     return () => {
       cancelled = true;
       mountedRef.current = false;
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, []);
+  }, [sessionRetry]);
 
   useEffect(() => {
     const delay = seedWait?.retryAt ? Date.parse(seedWait.retryAt) - Date.now() : 0;
@@ -87,7 +91,7 @@ export default function TimelinePage() {
     const epoch = epochRef.current;
     const timer = setTimeout(() => {
       setRetryReady(true);
-      if (seedWait?.reason === 'initial_posts_review' && document.visibilityState === 'visible' && mountedRef.current && epoch === epochRef.current) void initTimeline();
+      if (['initial_posts_review', 'initial_posts_publish', 'worker_budget'].includes(seedWait?.reason || '') && document.visibilityState === 'visible' && mountedRef.current && epoch === epochRef.current) void initTimeline();
     }, Math.min(delay, 2147483647));
     return () => clearTimeout(timer);
   }, [seedWait]);
@@ -299,7 +303,10 @@ export default function TimelinePage() {
     setPostText(prev => (prev.endsWith(' ') || prev === '' ? prev + tag : prev + ' ' + tag));
   };
 
-  if (!user) return null;
+  if (!user) return sessionError ? <main style={{ minHeight: '100vh', background: '#000', color: '#e7e9ea', padding: 24, fontFamily: 'system-ui, sans-serif' }}>
+    <p role="alert">{sessionError}</p>
+    <button onClick={() => { setSessionError(''); setSessionRetry(value => value + 1); }}>再試行する</button>
+  </main> : null;
 
   return (
     <div style={{ minHeight: '100vh', background: '#000', color: '#e7e9ea', fontFamily: 'system-ui, sans-serif' }}>

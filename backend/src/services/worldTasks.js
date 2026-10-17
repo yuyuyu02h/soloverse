@@ -22,5 +22,5 @@ async function withLease(userId, task) {
     throw error;
   }
   try { return await task(); }
-  finally { const cleanup = db.execute({ sql: 'DELETE FROM deployment_locks WHERE name=? AND owner=?', args: [name,owner] }); db.keepAlive(cleanup); await cleanup; }
+  finally { const cleanup = db.executeCleanup({ sql: 'DELETE FROM deployment_locks WHERE name=? AND owner=?', args: [name,owner] }); db.keepAlive(cleanup); await cleanup; }
 }

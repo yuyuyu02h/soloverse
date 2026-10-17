@@ -34,10 +34,17 @@ async function authMiddleware(req, res, next) {
   if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({ error: '認証が必要です', code: 'NO_TOKEN' });
   }
+  if (process.env.SOLOVERSE_RUNTIME === 'cloudflare' && (!JWT_SECRET || JWT_SECRET.length < 32)) {
+    return res.status(503).json({ error: 'サーバーの設定が未完了です', code: 'AUTH_UNAVAILABLE' });
+  }
+  const token = auth.split(' ')[1];
+  let decoded;
   try {
-    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare' && (!JWT_SECRET || JWT_SECRET.length < 32)) throw new Error('JWT not configured');
-    const token = auth.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    decoded = jwt.verify(token, JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'トークンが無効です', code: 'INVALID_TOKEN' });
+  }
+  try {
 
     // JWTの署名・有効期限は正しくても、参照先のユーザーがDBに存在しない場合がある
     // （例: 開発中にDBだけリセットして古いトークンがブラウザに残っているケース）
@@ -60,10 +67,12 @@ async function authMiddleware(req, res, next) {
     if (req.tokenScope === 'user' && !req.baseUrl.startsWith('/api/admin') && req.headers['x-soloverse-active'] === '1' && req.path !== '/logout') {
       await touchSession(req.userId, req.sessionId);
     }
-    next();
   } catch {
-    return res.status(401).json({ error: 'トークンが無効です', code: 'INVALID_TOKEN' });
+    console.error('[Auth] Session database temporarily unavailable');
+    res.set('Retry-After', '5');
+    return res.status(503).json({ error: '一時的にログイン状態を確認できません。少し待って再試行してください。', code: 'AUTH_UNAVAILABLE' });
   }
+  next();
 }
 
 function generateToken(userId, scope = 'user') {

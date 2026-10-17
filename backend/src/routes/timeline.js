@@ -350,6 +350,8 @@ router.post('/seed', authenticate, async (req, res) => {
     if (e.code === 'LLM_DEFERRED' || e.code === 'WORLD_BUSY') {
       const messages = {
         initial_posts_review: '初期投稿の内容を確認しています。まもなく表示します。',
+        initial_posts_publish: '初期投稿の確認が終わりました。まもなく表示します。',
+        worker_budget: '準備の続きを進めています。まもなく再開します。',
         world_busy: '世界を更新中です。少し待って再試行してください。',
         provider_quota: 'AI提供元の利用枠が回復するのを待っています。選んだモードと設定は保存されています。',
         provider_cooldown: 'AI提供元が一時休止中です。少し待って再試行してください。',

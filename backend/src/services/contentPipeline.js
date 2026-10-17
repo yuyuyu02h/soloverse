@@ -216,6 +216,9 @@ async function publishPool(userId) {
           await runtime.recordContent(userId,'publish','rejected',verdicts[index].reason);
         }
       }
+      // Persist approval before returning. The next invocation only publishes,
+      // leaving room for a three-provider review and all lock/telemetry cleanup.
+      if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') return 0;
     } catch (error) {
       const reason = await deferPool(userId, settings, error, 'quality_review_wait');
       await runtime.recordContent(userId,'publish','deferred',reason);
@@ -270,6 +273,10 @@ async function seedEnhanced(userId) {
   } else await fillPool(userId, { seed: true });
   const count = await publishPool(userId);
   if (!count) {
+    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') {
+      const approved = (await db.execute({ sql: `SELECT 1 FROM content_candidates c WHERE user_id=? AND ${currentVersion('c')} AND state='pending' AND reviewed=1 AND scheduled_at<=? LIMIT 1`, args: [userId,new Date().toISOString()] })).rows.length;
+      if (approved) throw new runtime.DeferredError('initial_posts_publish', Date.now() + 1500);
+    }
     const state = (await db.execute({ sql: 'SELECT next_fill_at,defer_reason FROM content_pool_state WHERE user_id=?', args: [userId] })).rows[0];
     throw new runtime.DeferredError(state?.defer_reason || 'initial_posts_wait', state?.next_fill_at);
   }
@@ -299,8 +306,12 @@ async function generateReply(userId, char, settings, target, { job = 'reply', pr
 
 async function publishAll() {
   if (!enabled()) return;
-  const users = (await db.execute(`SELECT DISTINCT user_id FROM content_candidates c WHERE state='pending'
-    AND ${activeGenerationSQL('c.user_id')} AND scheduled_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')`)).rows;
+  const cloudflare = process.env.SOLOVERSE_RUNTIME === 'cloudflare';
+  const users = (await db.execute(`SELECT user_id FROM content_candidates c WHERE state='pending'
+    AND ${activeGenerationSQL('c.user_id')} AND scheduled_at<=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+    ${cloudflare ? `AND ${currentVersion('c')} AND NOT EXISTS (SELECT 1 FROM content_pool_state s WHERE s.user_id=c.user_id
+      AND s.defer_reason!='' AND s.next_fill_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))` : ''}
+    GROUP BY user_id ORDER BY MIN(scheduled_at)${cloudflare ? ' LIMIT 1' : ''}`)).rows;
   for (const { user_id: userId } of users) await serializeWorldTask(userId, () => publishPool(userId));
   await db.batch([
     "DELETE FROM content_events WHERE created_at<strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days')",

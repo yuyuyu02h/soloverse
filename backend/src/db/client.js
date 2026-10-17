@@ -12,21 +12,39 @@ function statement(binding, input) {
   return binding.prepare(sql).bind(...args.map(value => value === undefined ? null : value));
 }
 function result(value) { return { rows: value.results || [], rowsAffected: value.meta?.changes || 0, lastInsertRowid: value.meta?.last_row_id }; }
+function changesWorldSettings(input) {
+  const sql = typeof input === 'string' ? input : input.sql;
+  return /^\s*(?:INSERT(?: OR (?:IGNORE|REPLACE))? INTO|UPDATE|DELETE FROM)\s+world_settings\b/i.test(sql);
+}
+// Reserve five of Free D1's 50 queries for leases and buffered telemetry.
+function requireQueryBudget(count, cleanup = false) {
+  const context = storage.getStore();
+  if (!context || context.queries + count <= (cleanup ? 50 : 45)) return;
+  const error = new Error('worker_budget');
+  error.code = 'LLM_DEFERRED';
+  error.retryAt = new Date(Date.now() + 1500).toISOString();
+  throw error;
+}
+async function execute(input, cleanup = false) {
+  const context = storage.getStore();
+  if (!context?.binding) return localClient().execute(input);
+  requireQueryBudget(1, cleanup);
+  context.queries++;
+  if (changesWorldSettings(input)) context.cache.clear();
+  return result(await statement(context.binding, input).all());
+}
 const db = {
-  async execute(input) {
-    const binding = storage.getStore()?.binding;
-    if (!binding) return localClient().execute(input);
-    const context = storage.getStore(); context.queries++;
-    const sql = typeof input === 'string' ? input : input.sql;
-    if (/^(?:UPDATE|INSERT|DELETE).*world_settings/is.test(sql.trim())) context.cache.clear();
-    return result(await statement(binding, input).all());
-  },
+  execute: input => execute(input),
+  executeCleanup: input => execute(input, true),
+  requireQueryBudget,
   async batch(inputs, mode) {
     const binding = storage.getStore()?.binding;
     if (!binding) return localClient().batch(inputs, mode);
     if (!inputs.length) return [];
-    if (inputs.some(input => /^(?:UPDATE|INSERT|DELETE).*world_settings/is.test((typeof input === 'string' ? input : input.sql).trim()))) storage.getStore().cache.clear();
+    if (inputs.some(changesWorldSettings)) storage.getStore().cache.clear();
     const compact = compactInserts(inputs);
+    // Admit the entire atomic batch before starting any of its statements.
+    requireQueryBudget(compact.length);
     storage.getStore().queries += compact.length;
     return (await binding.batch(compact.map(input => statement(binding, input)))).map(result);
   },
@@ -37,7 +55,7 @@ async function withDatabase(binding, task, executionContext) {
     try { return await task(); }
     finally {
       const rows = storage.getStore().telemetry;
-      if (rows.length) await binding.prepare(`INSERT INTO content_events(user_id,job,outcome,reason,scores,created_at) SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]'),json_extract(value,'$[4]'),json_extract(value,'$[5]') FROM json_each(?)`).bind(JSON.stringify(rows)).run();
+      if (rows.length) await db.executeCleanup({ sql: `INSERT INTO content_events(user_id,job,outcome,reason,scores,created_at) SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]'),json_extract(value,'$[4]'),json_extract(value,'$[5]') FROM json_each(?)`, args: [JSON.stringify(rows)] });
     }
   });
 }
@@ -58,7 +76,10 @@ db.memo = async (key, task) => {
   const context = storage.getStore();
   if (!context) return task();
   if (context.cache.has(key)) return context.cache.get(key);
-  const value = await task(); context.cache.set(key, value); return value;
+  const pending = Promise.resolve().then(task);
+  context.cache.set(key, pending);
+  try { return await pending; }
+  catch (error) { if (context.cache.get(key) === pending) context.cache.delete(key); throw error; }
 };
 db.bufferContent = row => storage.getStore().telemetry.push(row);
 db.keepAlive = promise => storage.getStore()?.executionContext?.waitUntil(promise);

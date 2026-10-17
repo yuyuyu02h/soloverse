@@ -220,6 +220,12 @@ router.post('/regenerate', authenticate, async (req, res) => {
       await db.batch(statements, 'write');
     });
 
+    // The client already starts /timeline/seed after rebuilding. Keep the
+    // resident replacement and post generation in separate Worker requests.
+    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') {
+      return res.json({ success: true, characterCount: characters.length, seedCount: 0, seedPending: true, warning: null });
+    }
+
     let seedCount = 0;
     let warning = null;
     try {

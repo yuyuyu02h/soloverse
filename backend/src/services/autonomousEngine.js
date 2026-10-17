@@ -39,6 +39,8 @@ async function runAutonomousTimeline(userId) {
   await themeState(userId);
   if (require('./contentConfig').enabled()) {
     const pipeline = require('./contentPipeline');
+    // Cron publishes/reviews in its own invocation; never spend both budgets here.
+    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') return pipeline.fillPool(userId);
     await pipeline.publishPool(userId);
     await pipeline.fillPool(userId);
     return pipeline.publishPool(userId);
@@ -443,7 +445,11 @@ async function checkAbsenceReactions(userId) {
 // バッチ: 全ユーザー処理
 // ─────────────────────────────────────────────────────────
 async function runAllUsers(only = null) {
-  const users = await db.execute({ sql: `SELECT id FROM users WHERE onboarding_done = 1 AND ${activeGenerationSQL('users.id')}` });
+  const refillOnly = process.env.SOLOVERSE_RUNTIME === 'cloudflare' && only === 'timeline';
+  const users = await db.execute({ sql: `SELECT id FROM users WHERE onboarding_done = 1 AND ${activeGenerationSQL('users.id')}
+    ${refillOnly ? `AND NOT EXISTS (SELECT 1 FROM content_pool_state s WHERE s.user_id=users.id AND s.next_fill_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      AND (SELECT COUNT(*) FROM content_candidates c WHERE c.user_id=users.id AND state='pending' AND ${currentVersion('c')})<=2
+      ORDER BY COALESCE((SELECT last_autonomous_at FROM autonomous_log WHERE user_id=users.id),'') LIMIT 1` : ''}` });
 
   for (const user of users.rows) {
     await serializeWorldTask(user.id, async () => { try {

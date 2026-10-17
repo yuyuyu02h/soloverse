@@ -25,14 +25,17 @@ await client.execute("INSERT INTO users(id,email,password_hash,username,onboardi
 });
 test.after(()=>{global.fetch=originalFetch;client.close();fs.rmSync(dir,{recursive:true,force:true});});
 
-test('Cloudflare seed generates, then reviews in a separate bounded invocation and releases each lock',async()=>{
+test('Cloudflare seed generates, reviews and publishes in separate bounded invocations and releases each lock',async()=>{
  await request(async()=>assert.rejects(pipeline.seedEnhanced('owner'),e=>e.code==='LLM_DEFERRED' && e.message==='initial_posts_review'));
  assert.equal(network,1);
  assert.equal((await client.execute('SELECT COUNT(*) n FROM deployment_locks')).rows[0].n,0);
  assert.equal((await client.execute('SELECT COUNT(*) n FROM content_candidates WHERE reviewed=0')).rows[0].n,4);
  assert.equal((await client.execute('SELECT COUNT(*) n FROM posts')).rows[0].n,0);
- await request(async()=>assert.equal(await pipeline.seedEnhanced('owner'),4));
+ await request(async()=>assert.rejects(pipeline.seedEnhanced('owner'),e=>e.code==='LLM_DEFERRED' && e.message==='initial_posts_publish'));
  assert.equal(network,1);
+ assert.equal((await client.execute('SELECT COUNT(*) n FROM posts')).rows[0].n,0);
+ await request(async()=>assert.equal(await pipeline.seedEnhanced('owner'),4));
+ assert.equal(network,0);
  assert.equal((await client.execute('SELECT COUNT(*) n FROM deployment_locks')).rows[0].n,0);
  assert.equal((await client.execute('SELECT COUNT(*) n FROM posts')).rows[0].n,4);
  const before=(await client.execute('SELECT COUNT(*) n FROM llm_attempts')).rows[0].n;
@@ -112,8 +115,10 @@ test('three-provider waterfall stays within the Worker request budget and review
   await request(async()=>assert.rejects(pipeline.seedEnhanced('owner'),e=>e.code==='LLM_DEFERRED'&&e.message==='initial_posts_review'));
   assert.equal(network,3);
   assert.deepEqual(models,['waterfall-groq','waterfall-gemini','openrouter/free']);
-  await request(async()=>assert.equal(await pipeline.seedEnhanced('owner'),4));
+  await request(async()=>assert.rejects(pipeline.seedEnhanced('owner'),e=>e.code==='LLM_DEFERRED'&&e.message==='initial_posts_publish'));
   assert.equal(network,1);
+  await request(async()=>assert.equal(await pipeline.seedEnhanced('owner'),4));
+  assert.equal(network,0);
   assert.equal((await client.execute('SELECT COUNT(*) n FROM deployment_locks')).rows[0].n,0);
   assert.equal((await client.execute('SELECT COUNT(*) n FROM posts')).rows[0].n,4);
   process.env.LLM_DAILY_REQUEST_BUDGET='1';
