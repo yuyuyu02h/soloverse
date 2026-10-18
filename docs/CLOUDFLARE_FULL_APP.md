@@ -53,6 +53,8 @@ JWT_SECRETとADMIN_USER_IDSはサーバー用Secretsです。初期値は `.priv
 
 ## 開発・更新
 
+2026年10月18日、Next 16.4.2と関連依存、APIのproxy-addr 2.0.8をPages・Workerへ公開済み。更新前後の127テストと公開後の認証・画面確認は [DEPENDENCY_UPDATE_2026-10-18.md](DEPENDENCY_UPDATE_2026-10-18.md) に記録。DBマイグレーションは不要。開発用監視ツール由来の警告3件は本番依存に含まれず、修正版待ちとして分けて記録している。
+
 ```sh
 npm ci
 npm ci --prefix backend
