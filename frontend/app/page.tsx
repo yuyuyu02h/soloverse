@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 're
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ArrowLeft, ArrowRight, Bot, Eye, EyeOff, Heart, MessageSquare } from 'lucide-react';
-import { api, clearToken, clearUser, getToken, setToken, setUser } from '../lib/api';
+import { api, getToken, setToken, setUser } from '../lib/api';
 import styles from './page.module.css';
 import { loginCredentials } from '../lib/credentials';
 import { SCREEN_PREVIEW, PRIVATE_APP } from '../lib/deployment';
@@ -82,6 +82,8 @@ export default function Home() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [sessionError, setSessionError] = useState('');
+  const [sessionRetry, setSessionRetry] = useState(0);
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   // The fourth card waits below the clipped window until the next scroll.
   const [displayStream, setDisplayStream] = useState<AIPost[]>(AI_THOUGHTS_STREAM.slice(0, 4));
@@ -91,22 +93,25 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    if (SCREEN_PREVIEW || !getToken()) {
+    const token = getToken();
+    if (SCREEN_PREVIEW || !token) {
       setCheckingSession(false);
       return;
     }
+    setCheckingSession(true);
+    setSessionError('');
     api.get('/api/auth/me').then(user => {
-      if (cancelled) return;
+      if (cancelled || token !== getToken()) return;
       setUser(user);
       router.replace(user.onboardingDone ? '/timeline' : '/onboarding');
-    }).catch(() => {
+    }).catch(caught => {
       if (cancelled) return;
-      clearToken();
-      clearUser();
+      // The API clears only invalid (401) sessions. Keep valid credentials offline.
+      if (token === getToken()) setSessionError(caught instanceof Error ? caught.message : 'ログイン状態を確認できませんでした');
       setCheckingSession(false);
     });
     return () => { cancelled = true; };
-  }, [router]);
+  }, [router, sessionRetry]);
 
   useLayoutEffect(() => {
     const track = streamRef.current;
@@ -175,7 +180,7 @@ export default function Home() {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (loading || checkingSession) return;
+    if (loading || checkingSession || sessionError) return;
     setError('');
     setLoading(true);
     try {
@@ -192,7 +197,7 @@ export default function Home() {
     }
   };
 
-  const busy = loading || checkingSession || SCREEN_PREVIEW;
+  const busy = loading || checkingSession || Boolean(sessionError) || SCREEN_PREVIEW;
 
   return (
     <div className={styles.page}>
@@ -237,6 +242,10 @@ export default function Home() {
                       </button>
                     </label>
                     {error && <p className={styles.error} role="alert">{error}</p>}
+                    {sessionError && <div className={styles.error} role="alert">
+                      <p>{sessionError}</p>
+                      <button type="button" className={styles.switchLink} onClick={() => { setCheckingSession(true); setSessionRetry(value => value + 1); }}>ログイン状態を再確認する</button>
+                    </div>}
                     <button type="submit" className={styles.primaryButton} disabled={busy}>
                       <span>{checkingSession ? '確認中...' : loading ? 'ログイン中...' : 'ログイン'}</span><ArrowRight size={15} />
                     </button>

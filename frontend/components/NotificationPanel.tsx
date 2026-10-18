@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Avatar, timeAgo } from './utils';
+import { startVisiblePolling } from '../lib/visiblePolling';
 
 interface Notification {
   id: string;
@@ -43,8 +44,7 @@ export function NotificationPanel({ onClose, onUnreadCountUpdate }: {
 
   useEffect(() => {
     if (!celebrityMode) return;
-    const interval = setInterval(() => { void loadNotifications().catch(console.error); }, 5000);
-    return () => clearInterval(interval);
+    return startVisiblePolling(loadNotifications, 5000);
   }, [celebrityMode]);
 
   const toggleCelebrityNotifications = async () => {

@@ -10,6 +10,8 @@ import { TrendPanel } from '../../components/TrendPanel';
 import { Avatar } from '../../components/utils';
 import type { Post } from '../../components/PostCard';
 import { SCREEN_PREVIEW } from '../../lib/deployment';
+import { startVisiblePolling } from '../../lib/visiblePolling';
+import { getTimelineUpdates } from '../../lib/timelineUpdates';
 
 export default function TimelinePage() {
   const router = useRouter();
@@ -46,7 +48,7 @@ export default function TimelinePage() {
   const themeVersionRef = useRef(1);
 
   const latestCreatedAt = useRef<string | null>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollIntervalRef = useRef<(() => void) | null>(null);
   const pollingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const postsRef = useRef<Post[]>([]);
@@ -79,7 +81,7 @@ export default function TimelinePage() {
     return () => {
       cancelled = true;
       mountedRef.current = false;
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current?.();
     };
   }, [sessionRetry]);
 
@@ -153,26 +155,41 @@ export default function TimelinePage() {
   };
 
   const startPolling = () => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    pollIntervalRef.current = setInterval(async () => {
+    pollIntervalRef.current?.();
+    let lastFullRefresh = Date.now();
+    pollIntervalRef.current = startVisiblePolling(async resumed => {
       if (pollingRef.current) return;
       pollingRef.current = true;
       const epoch = epochRef.current;
       try {
-        // 差分のみ取得（sinceパラメータで最新投稿以降だけ）
-        const sinceParam = latestCreatedAt.current
-          ? '?since=' + encodeURIComponent(latestCreatedAt.current)
-          : '?page=0';
         const historyParam = historyRef.current ? '&history=true' : '';
-        const data = await api.get('/api/timeline' + sinceParam + historyParam);
+        if (!resumed && Date.now() - lastFullRefresh < 30_000) {
+          // Keep the existing five-second audience animation without a second
+          // polling loop duplicating the full refresh at the thirty-second mark.
+          const ids = postsRef.current.filter(post => post.experience_mode === 'celebrity').map(post => post.id).slice(0, 100);
+          if (!ids.length) return;
+          const [result, notifications] = await Promise.all([
+            api.get('/api/timeline?ids=' + encodeURIComponent(ids.join(',')) + historyParam),
+            api.get('/api/timeline/notifications/unread-count'),
+          ]);
+          if (!mountedRef.current || epoch !== epochRef.current) return;
+          setPosts(previous => mergePosts(result.posts, previous));
+          setUnreadCount(notifications.count);
+          return;
+        }
+        lastFullRefresh = Date.now();
+        const isCurrent = () => mountedRef.current && epoch === epochRef.current && document.visibilityState === 'visible';
+        const data = await getTimelineUpdates(api.get, latestCreatedAt.current, historyRef.current, isCurrent);
+        if (!data) return;
+        if (data.themeVersion !== themeVersionRef.current) { void initTimeline(); return; }
         const visible = postsRef.current;
         const refreshed: Post[] = [];
         for (let i = 0; i < visible.length; i += 100) {
+          if (!isCurrent()) return;
           const result = await api.get('/api/timeline?ids=' + encodeURIComponent(visible.slice(i, i + 100).map(p => p.id).join(',')) + historyParam);
           refreshed.push(...result.posts);
         }
-        if (!mountedRef.current || epoch !== epochRef.current) return;
-        if (data.themeVersion !== themeVersionRef.current) { void initTimeline(); return; }
+        if (!isCurrent()) return;
         const refreshedIds = new Set(visible.map(post => post.id));
         setPosts(prev => mergePosts(refreshed, prev.filter(post => !refreshedIds.has(post.id))));
 
@@ -197,35 +214,12 @@ export default function TimelinePage() {
       } finally {
         pollingRef.current = false;
       }
-    }, 30 * 1000);
+    }, 5000);
   };
 
   useEffect(() => {
-    return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
+    return () => { pollIntervalRef.current?.(); };
   }, []);
-
-  // 有名人体験の数字と通知は短い間隔で更新し、反応が増えていく様子を見せる。
-  useEffect(() => {
-    if (!user) return;
-    let busy = false;
-    const interval = setInterval(async () => {
-      const ids = postsRef.current.filter(post => post.experience_mode === 'celebrity').map(post => post.id).slice(0, 100);
-      if (!ids.length || busy) return;
-      busy = true;
-      const epoch = epochRef.current;
-      try {
-        const [result, notifications] = await Promise.all([
-          api.get('/api/timeline?ids=' + encodeURIComponent(ids.join(','))),
-          api.get('/api/timeline/notifications/unread-count'),
-        ]);
-        if (!mountedRef.current || epoch !== epochRef.current) return;
-        setPosts(previous => mergePosts(result.posts, previous));
-        setUnreadCount(notifications.count);
-      } catch (e) { console.error('Celebrity refresh error:', e); }
-      finally { busy = false; }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [user?.userId]);
 
   // ─── 無限スクロール ────────────────────────────────────
   const loadMore = useCallback(async () => {

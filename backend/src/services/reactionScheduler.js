@@ -35,10 +35,14 @@ function mentionedResidents(content, residents) {
 
 async function queueReaction({ userId, characterId, postId, type, delayMinutes, replyPriority = 0 }) {
   const settings = await themeState(userId);
-  await db.execute({
+  await db.execute(reactionStatement({ userId, characterId, postId, type, delayMinutes, replyPriority }, settings));
+}
+
+function reactionStatement({ userId, characterId, postId, type, delayMinutes, replyPriority = 0 }, settings) {
+  return {
     sql: `INSERT INTO reaction_queue (id, user_id, character_id, post_id, reaction_type, scheduled_at,theme_version,reply_priority) VALUES (?, ?, ?, ?, ?, ?,?,?)`,
     args: [uuidv4(), userId, characterId, postId, type, new Date(Date.now() + delayMinutes * 60000).toISOString(),settings?.theme_version || 1,replyPriority],
-  });
+  };
 }
 
 // 通常投稿へのリアクションをスケジュール
@@ -92,8 +96,15 @@ async function scheduleReactions(userId, postId, postContent) {
 
 // リプライ投稿へのAI反応をスケジュール（確率低め・1〜2人のみ）
 async function scheduleReplyReactions(userId, replyPostId, replyContent, parentPostId) {
+  const prepared = await prepareReplyReactions(userId, replyPostId, replyContent, parentPostId);
+  if (prepared.statements.length) await db.batch(prepared.statements, 'write');
+  return prepared.scheduled;
+}
+
+// Prepare without writing so a reply and all its reservations can commit together.
+async function prepareReplyReactions(userId, replyPostId, replyContent, parentPostId) {
   const settings = await themeState(userId);
-  if (!settings) return null;
+  if (!settings) return { scheduled: null, statements: [] };
   const parent = (await db.execute({ sql: 'SELECT author_id,author_type FROM posts WHERE id=? AND user_id=?', args: [parentPostId,userId] })).rows[0];
   const residents = (await db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id=? AND ${currentVersion('c')} ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END,RANDOM()`, args: [userId,parent?.author_type === 'ai' ? parent.author_id : ''] })).rows;
   const mentioned = mentionedResidents(replyContent, residents);
@@ -101,14 +112,15 @@ async function scheduleReplyReactions(userId, replyPostId, replyContent, parentP
   const chars = [...mentioned, ...residents.filter(char => !mentionedIds.has(char.id))].slice(0, Math.max(2, mentioned.length));
   const direct = mentioned.length > 0 || analyzeEngagementIntent(replyContent).wantsReply || parent?.author_type === 'ai';
   let count = 0;
+  const statements = [];
   for (const [index,char] of chars.entries()) {
     const priority = mentionedIds.has(char.id) || (!mentioned.length && direct && index === 0);
     if (!priority && Math.random() > 0.4) continue;
-    await queueReaction({ userId,characterId:char.id,postId:replyPostId,type:'reply',delayMinutes:mentionedIds.has(char.id) ? 1 : priority ? directReplyDelayMinutes() : calcDelay(char.delay_profile)+5,replyPriority:mentionedIds.has(char.id) ? 2 : priority ? 1 : 0 });
+    statements.push(reactionStatement({ userId,characterId:char.id,postId:replyPostId,type:'reply',delayMinutes:mentionedIds.has(char.id) ? 1 : priority ? directReplyDelayMinutes() : calcDelay(char.delay_profile)+5,replyPriority:mentionedIds.has(char.id) ? 2 : priority ? 1 : 0 }, settings));
     count++;
     if (settings.position === 'admired' && count >= Math.max(1, mentioned.length)) break;
   }
-  return { replyCount:count,directReply:direct && count>0,replyWithinMinutes:direct && count>0 ? directReplyMaximumMinutes() : null };
+  return { statements, scheduled: { replyCount:count,directReply:direct && count>0,replyWithinMinutes:direct && count>0 ? directReplyMaximumMinutes() : null } };
 }
 
 function calcDelay(delayProfile) {
@@ -376,6 +388,7 @@ module.exports = {
   analyzeEngagementIntent,
   scheduleReactions,
   scheduleReplyReactions,
+  prepareReplyReactions,
   backfillDirectReplies,
   processReactionQueue,
   generateAITimelinePosts,

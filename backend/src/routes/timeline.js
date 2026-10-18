@@ -2,7 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { authMiddleware: authenticate } = require('../middleware/auth');
-const { scheduleReactions, scheduleReplyReactions, generateAITimelinePosts } = require('../services/reactionScheduler');
+const { scheduleReactions, prepareReplyReactions, generateAITimelinePosts } = require('../services/reactionScheduler');
 const { themeState, currentVersion } = require('../services/worldTheme');
 const { serializeWorldTask } = require('../services/worldTasks');
 const {
@@ -29,6 +29,8 @@ router.get('/', authenticate, async (req, res) => {
   const parsedPage = Number.parseInt(String(req.query.page ?? '0'), 10);
   const page = Number.isFinite(parsedPage) && parsedPage >= 0 ? parsedPage : 0;
   const since = req.query.since; // 差分ポーリング用: ISO文字列
+  // Existing open tabs keep the unpaged protocol until their next reload.
+  const pagedDelta = Boolean(since) && req.query.delta === 'true';
   const limit = 30;
   const offset = page * limit;
 
@@ -50,8 +52,8 @@ router.get('/', authenticate, async (req, res) => {
             LEFT JOIN ai_characters ac ON p.author_type = 'ai'  AND p.author_id = ac.id
             LEFT JOIN users u          ON p.author_type = 'user' AND p.author_id = u.id
             WHERE p.user_id = ? AND p.reply_to IS NULL AND datetime(p.created_at) >= datetime(?)
-            ORDER BY datetime(p.created_at) DESC, p.id DESC`;
-      args = [userId, userId, since];
+            ORDER BY datetime(p.created_at) DESC, p.id DESC${pagedDelta ? ' LIMIT ?' : ''}`;
+      args = [userId, userId, since, ...(pagedDelta ? [limit + 1] : [])];
     } else {
       // 通常取得（ページネーション）
       sql = `SELECT p.*,
@@ -82,13 +84,17 @@ router.get('/', authenticate, async (req, res) => {
       sql = sql.slice(0, sql.indexOf('WHERE p.user_id = ?')) +
         `WHERE p.user_id = ? AND p.reply_to IS NULL
           AND (datetime(p.created_at) < datetime(?) OR (datetime(p.created_at) = datetime(?) AND p.id < ?))
+          ${since ? 'AND datetime(p.created_at) >= datetime(?)' : ''}
          ORDER BY datetime(p.created_at) DESC, p.id DESC LIMIT ?`;
-      args = [userId, userId, String(req.query.before), String(req.query.before), String(req.query.beforeId), limit];
+      args = [userId, userId, String(req.query.before), String(req.query.before), String(req.query.beforeId), ...(since ? [since] : []), pagedDelta ? limit + 1 : limit];
     }
     sql = sql.replace('WHERE p.user_id = ?', `WHERE p.user_id = ? AND (p.deleted_at IS NULL OR EXISTS (SELECT 1 FROM posts child WHERE child.user_id=p.user_id AND child.reply_to=p.id) OR EXISTS (SELECT 1 FROM celebrity_comments c WHERE c.scene_post_id=p.id AND c.user_id=p.user_id))`);
     if (req.query.history !== 'true') sql = sql.replace('WHERE p.user_id = ?', `WHERE p.user_id = ? AND ${currentVersion('p')}`);
     const posts = await db.execute({ sql, args });
-    const decoratedPosts = await decorateTimelinePosts(userId, posts.rows);
+    const moreDelta = pagedDelta && typeof req.query.ids !== 'string' && posts.rows.length > limit;
+    const pageRows = moreDelta ? posts.rows.slice(0, limit) : posts.rows;
+    const last = pageRows.at(-1);
+    const decoratedPosts = await decorateTimelinePosts(userId, pageRows);
 
     // 各投稿の直近リプライを最大2件取得（プレビュー用）
     const postIds = decoratedPosts.map(p => p.id);
@@ -120,7 +126,7 @@ router.get('/', authenticate, async (req, res) => {
       reply_preview: repliesMap[p.id] || [],
     }));
 
-    res.json({ posts: enriched, theme: settings?.interests || '', mode: settings?.mode || 'hobby', modeLabel: settings?.mode_label || '趣味共感モード', themeVersion: settings?.theme_version || 1 });
+    res.json({ posts: enriched, deltaCursor: moreDelta ? { before: last.created_at, beforeId: last.id } : null, theme: settings?.interests || '', mode: settings?.mode || 'hobby', modeLabel: settings?.mode_label || '趣味共感モード', themeVersion: settings?.theme_version || 1 });
   } catch (e) {
     console.error('Timeline error:', e);
     res.status(500).json({ error: 'タイムライン取得に失敗しました' });
@@ -154,15 +160,18 @@ router.post('/post', authenticate, async (req, res) => {
       const createdAt = new Date().toISOString();
       const user = await db.execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] });
 
-      await db.execute({
+      const mode = await experienceMode(userId);
+      const prepared = replyTo ? await prepareReplyReactions(userId, postId, content.trim(), replyTo) : null;
+      const postStatement = {
         sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, created_at, ai,theme_version) VALUES (?, ?, ?, 'user', ?, ?, ?, 0,?)`,
         args: [postId, userId, userId, content.trim(), replyTo || null, createdAt,version],
-      });
+      };
+      if (prepared) await db.batch([postStatement, ...prepared.statements], 'write');
+      else await db.execute(postStatement);
 
-      let scheduled = null;
+      let scheduled = prepared?.scheduled || null;
       let initialLikeCount = 0;
       let initialReplyCount = 0;
-      const mode = await experienceMode(userId);
       if (!replyTo) {
         // admired は個別住人を大量に作らず、観客全体の演出を別経路で準備する。
         try {
@@ -178,8 +187,6 @@ router.post('/post', authenticate, async (req, res) => {
           // 投稿自体は保存済みなので、リアクション予約だけの失敗で投稿を500にしない。
           console.error('Schedule error:', e);
         }
-      } else {
-        scheduled = await scheduleReplyReactions(userId, postId, content.trim(), replyTo);
       }
 
       res.json({

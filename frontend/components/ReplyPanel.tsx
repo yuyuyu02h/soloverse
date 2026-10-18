@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { Avatar, timeAgo, renderContent } from './utils';
 import type { Post } from './PostCard';
 import { DeletePostButton } from './DeletePostButton';
+import { startVisiblePolling } from '../lib/visiblePolling';
 
 const formatCount = (value: number) => new Intl.NumberFormat('ja-JP').format(Number(value) || 0);
 
@@ -50,8 +51,8 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent, onPostDele
       .finally(() => { refreshing = false; if (!cancelled) setLoading(false); });
     };
     void refresh();
-    const interval = setInterval(refresh, post.experience_mode === 'celebrity' ? 5000 : 30000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const stop = startVisiblePolling(refresh, post.experience_mode === 'celebrity' ? 5000 : 30000);
+    return () => { cancelled = true; stop(); };
   }, [post.id]);
 
   const sendReply = async () => {
@@ -59,13 +60,20 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent, onPostDele
     setSending(true);
     setSendError('');
     try {
-      await api.post('/api/timeline/post', { content: replyText.trim(), replyTo: replyTo.id });
+      const saved = await api.post('/api/timeline/post', { content: replyText.trim(), replyTo: replyTo.id });
       setReplyText('');
-      const d = await api.get(`/api/timeline/replies/${post.id}`);
-      setReplies(d.replies);
-      setLikedPosts(new Set(d.replies.filter((reply: Post) => Boolean(reply.user_liked)).map((reply: Post) => reply.id)));
-      setLikeCounts(Object.fromEntries(d.replies.map((reply: Post) => [reply.id, Number(reply.like_count)])));
+      if (saved.post) setReplies(previous => [...previous.filter(reply => reply.id !== saved.post.id), saved.post]);
       onReplySent?.();
+      // A read failing after a successful save must not invite a duplicate send.
+      try {
+        const d = await api.get(`/api/timeline/replies/${post.id}`);
+        setReplies(d.replies);
+        setLoadError('');
+        setLikedPosts(new Set(d.replies.filter((reply: Post) => Boolean(reply.user_liked)).map((reply: Post) => reply.id)));
+        setLikeCounts(Object.fromEntries(d.replies.map((reply: Post) => [reply.id, Number(reply.like_count)])));
+      } catch {
+        setLoadError('返信は送信済みです。一覧を更新できませんでした。次の更新をお待ちください。');
+      }
     } catch (e: unknown) {
       setSendError(e instanceof Error ? e.message : '返信に失敗しました');
     }
