@@ -73,9 +73,13 @@ PagesのGitHubビルドコマンドは `npm ci --prefix frontend && npm run buil
 
 参考: [Cloudflareのブランチ公開制御](https://developers.cloudflare.com/pages/configuration/branch-build-controls/)。
 
-### 一時的な非公開と再開（未実施）
+### 一時的な非公開と再開（今回は取りやめ）
+
+2026年10月18日、本人の指示により今回の非公開化は取りやめ。新たな依頼まで契約・有効化・アクセス制限を進めない。以下は検討経緯と将来の参照用。
 
 データやプロジェクトを削除せず、一時的にアクセスを拒否し、後で解除して再開する運用は可能。2026年10月18日の相談では説明・記録のみを行い、設定変更はしない。
+
+同日、その後の実行依頼を受けて確認したところ、Accessが未有効化で、無料プランの初回有効化に規約同意・無料枠超過時の請求許可が必要だった。本人による確定が必要なため未完了。本番はまだ一般から閲覧できる。画面とAPI両方を保護する具体的な手順・API接続上の注意点は [PRIVATE_ACCESS.md](PRIVATE_ACCESS.md) を参照。
 
 - 管理者だけ閲覧できる状態ならCloudflare Accessで許可する利用者を絞る。誰も閲覧できない状態なら全員を拒否する設定を検討する。
 - Pagesの標準Access設定はそのままではプレビューURLのみを保護する。本番 `soloverse.pages.dev` と `*.soloverse.pages.dev` の両方を保護し、旧プロジェクトの本番・過去のデプロイURLも確認する。手順は[本番pages.devをAccessで保護する公式案内](https://developers.cloudflare.com/pages/platform/known-issues/#enable-access-on-your-pagesdev-domain)を参照。
