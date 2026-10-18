@@ -370,7 +370,7 @@ router.post('/seed', authenticate, async (req, res) => {
   try {
     await themeState(userId);
     const existing = await db.execute({
-      sql: `SELECT COUNT(*) as count FROM posts p WHERE user_id = ? AND ${currentVersion('p')} AND author_type = 'ai'`, args: [userId],
+      sql: `SELECT COUNT(*) as count FROM posts p WHERE user_id = ? AND ${currentVersion('p')} AND author_type = 'ai' AND reply_to IS NULL AND deleted_at IS NULL`, args: [userId],
     });
     if (existing.rows[0]?.count > 0) return res.json({ message: '既に投稿があります' });
     await generateAITimelinePosts(userId);
@@ -380,6 +380,8 @@ router.post('/seed', authenticate, async (req, res) => {
       const messages = {
         initial_posts_review: '初期投稿の内容を確認しています。まもなく表示します。',
         initial_posts_publish: '初期投稿の確認が終わりました。まもなく表示します。',
+        initial_posts_rejected: '初期投稿の候補が品質基準を満たさなかったため、少し待って自動で作り直します。',
+        initial_posts_retry_limit: '初期投稿の候補が続けて品質基準を満たさなかったため、自動再試行を停止しました。利用枠を守るため30分後に再試行できます。',
         worker_budget: '準備の続きを進めています。まもなく再開します。',
         world_busy: '世界を更新中です。少し待って再試行してください。',
         provider_quota: 'AI提供元の利用枠が回復するのを待っています。選んだモードと設定は保存されています。',

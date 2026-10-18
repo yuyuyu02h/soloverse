@@ -88,11 +88,23 @@ export default function TimelinePage() {
     setRetryReady(!(delay > 0));
     if (!(delay > 0)) return;
     const epoch = epochRef.current;
+    let continuing = false;
+    const resume = () => {
+      if (continuing || Date.parse(seedWait!.retryAt!) > Date.now() || document.visibilityState !== 'visible' || !mountedRef.current || epoch !== epochRef.current) return;
+      if (['initial_posts_review', 'initial_posts_publish', 'initial_posts_rejected', 'worker_budget'].includes(seedWait?.reason || '')) {
+        continuing = true;
+        void initTimeline();
+      }
+    };
     const timer = setTimeout(() => {
       setRetryReady(true);
-      if (['initial_posts_review', 'initial_posts_publish', 'worker_budget'].includes(seedWait?.reason || '') && document.visibilityState === 'visible' && mountedRef.current && epoch === epochRef.current) void initTimeline();
+      resume();
     }, Math.min(delay, 2147483647));
-    return () => clearTimeout(timer);
+    document.addEventListener('visibilitychange', resume);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', resume);
+    };
   }, [seedWait]);
 
   const initTimeline = async () => {

@@ -208,7 +208,9 @@ async function publishPool(userId) {
         inputs.push({content:row.content,parent:parent?.content});
       }
       const verdicts = await reviewBatch(userId,settings,inputs);
-      await db.batch(unchecked.map((row,index)=>({sql:'UPDATE content_candidates SET reviewed=1,state=? WHERE id=? AND user_id=?',args:[verdicts[index].accepted ? 'pending' : 'discarded',row.id,userId]})),'write');
+      // Save all verdicts atomically in one query, including when three
+      // providers were needed and empty-pool recovery still has work to do.
+      await db.execute({ sql: `UPDATE content_candidates SET reviewed=1,state=CASE WHEN id IN (SELECT value FROM json_each(?)) THEN 'pending' ELSE 'discarded' END WHERE user_id=? AND id IN (SELECT value FROM json_each(?))`, args: [JSON.stringify(unchecked.filter((_,index)=>verdicts[index].accepted).map(row=>row.id)), userId, JSON.stringify(unchecked.map(row=>row.id))] });
       for (const [index,row] of unchecked.entries()) {
         row.reviewed=1;
         if (!verdicts[index].accepted) {
@@ -260,8 +262,8 @@ async function publishPool(userId) {
 }
 
 async function seedEnhanced(userId) {
-  await themeState(userId);
-  const exists = await db.execute({ sql: `SELECT 1 FROM posts p WHERE user_id=? AND ${currentVersion('p')} AND author_type='ai' LIMIT 1`, args: [userId] });
+  const settings = await themeState(userId);
+  const exists = await db.execute({ sql: `SELECT 1 FROM posts p WHERE user_id=? AND ${currentVersion('p')} AND author_type='ai' AND reply_to IS NULL AND deleted_at IS NULL LIMIT 1`, args: [userId] });
   if (exists.rows.length) return 0;
   if (process.env.SOLOVERSE_RUNTIME === 'cloudflare' && config().review) {
     const pending = (await db.execute({ sql: `SELECT 1 FROM content_candidates c WHERE user_id=? AND ${currentVersion('c')} AND state='pending' LIMIT 1`, args: [userId] })).rows.length;
@@ -273,11 +275,24 @@ async function seedEnhanced(userId) {
   } else await fillPool(userId, { seed: true });
   const count = await publishPool(userId);
   if (!count) {
-    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') {
-      const approved = (await db.execute({ sql: `SELECT 1 FROM content_candidates c WHERE user_id=? AND ${currentVersion('c')} AND state='pending' AND reviewed=1 AND scheduled_at<=? LIMIT 1`, args: [userId,new Date().toISOString()] })).rows.length;
-      if (approved) throw new runtime.DeferredError('initial_posts_publish', Date.now() + 1500);
-    }
     const state = (await db.execute({ sql: 'SELECT next_fill_at,defer_reason FROM content_pool_state WHERE user_id=?', args: [userId] })).rows[0];
+    if (state?.defer_reason && Date.parse(state.next_fill_at) > Date.now()) throw new runtime.DeferredError(state.defer_reason, state.next_fill_at);
+    const pending = (await db.execute({ sql: `SELECT MIN(scheduled_at) AS due,MIN(reviewed) AS reviewed FROM content_candidates c WHERE user_id=? AND ${currentVersion('c')} AND state='pending'`, args: [userId] })).rows[0];
+    if (pending?.due) throw new runtime.DeferredError(pending.reviewed ? 'initial_posts_publish' : 'initial_posts_review', Math.max(Date.now() + 1500, Date.parse(pending.due)));
+    // Only an empty pool may recover early. Keep provider/budget backoff intact.
+    // Persist failures so reloads, different Workers and background review cannot
+    // reset the two short retries. No schema change is needed for this history.
+    if (settings && state && (!state.defer_reason || Date.parse(state.next_fill_at) <= Date.now())) {
+      const since = new Date(Math.max(Date.now() - 30 * 60000, Date.parse(settings.theme_changed_at))).toISOString();
+      const failures = (await db.execute({ sql: `SELECT COUNT(*) AS n FROM content_events WHERE user_id=? AND job='seed_recovery' AND outcome='empty' AND created_at>=? AND json_extract(scores,'$.theme_version')=?`, args: [userId, since, settings.theme_version] })).rows[0].n;
+      const reason = failures < 2 ? 'initial_posts_rejected' : 'initial_posts_retry_limit';
+      const retryAt = new Date(Date.now() + (failures === 0 ? 30000 : failures === 1 ? 60000 : 30 * 60000)).toISOString();
+      await db.batch([
+        { sql: 'UPDATE content_pool_state SET next_fill_at=?,defer_reason=? WHERE user_id=? AND theme_version=?', args: [retryAt, reason, userId, settings.theme_version] },
+        { sql: `INSERT INTO content_events(user_id,job,outcome,reason,scores,created_at) VALUES(?,'seed_recovery','empty',?,?,?)`, args: [userId, reason, JSON.stringify({ theme_version: settings.theme_version }), new Date().toISOString()] },
+      ], 'write');
+      throw new runtime.DeferredError(reason, retryAt);
+    }
     throw new runtime.DeferredError(state?.defer_reason || 'initial_posts_wait', state?.next_fill_at);
   }
   return count;
