@@ -4,12 +4,17 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Avatar, timeAgo, renderContent } from './utils';
 import type { Post } from './PostCard';
+import { DeletePostButton } from './DeletePostButton';
+import { startVisiblePolling } from '../lib/visiblePolling';
 
-export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
+const formatCount = (value: number) => new Intl.NumberFormat('ja-JP').format(Number(value) || 0);
+
+export function ReplyPanel({ post, onClose, currentUser, onReplySent, onPostDeleted }: {
   post: Post;
   onClose: () => void;
-  currentUser: { username: string };
+  currentUser: { userId: string; username: string };
   onReplySent?: () => void;
+  onPostDeleted?: (id: string) => void | Promise<void>;
 }) {
   const [replies, setReplies] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +25,12 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
   const [likeCounts, setLikeCounts] = useState<Record<string, number>>({});
   const [loadError, setLoadError] = useState('');
   const [replyTo, setReplyTo] = useState<Post>(post);
+  const deleted = async (id: string) => {
+    const data = await api.get(`/api/timeline/replies/${post.id}`);
+    setReplies(data.replies);
+    if (replyTo.id === id) setReplyTo(post);
+    await onPostDeleted?.(id);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -40,8 +51,8 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
       .finally(() => { refreshing = false; if (!cancelled) setLoading(false); });
     };
     void refresh();
-    const interval = setInterval(refresh, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const stop = startVisiblePolling(refresh, post.experience_mode === 'celebrity' ? 5000 : 30000);
+    return () => { cancelled = true; stop(); };
   }, [post.id]);
 
   const sendReply = async () => {
@@ -49,13 +60,20 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
     setSending(true);
     setSendError('');
     try {
-      await api.post('/api/timeline/post', { content: replyText.trim(), replyTo: replyTo.id });
+      const saved = await api.post('/api/timeline/post', { content: replyText.trim(), replyTo: replyTo.id });
       setReplyText('');
-      const d = await api.get(`/api/timeline/replies/${post.id}`);
-      setReplies(d.replies);
-      setLikedPosts(new Set(d.replies.filter((reply: Post) => Boolean(reply.user_liked)).map((reply: Post) => reply.id)));
-      setLikeCounts(Object.fromEntries(d.replies.map((reply: Post) => [reply.id, Number(reply.like_count)])));
+      if (saved.post) setReplies(previous => [...previous.filter(reply => reply.id !== saved.post.id), saved.post]);
       onReplySent?.();
+      // A read failing after a successful save must not invite a duplicate send.
+      try {
+        const d = await api.get(`/api/timeline/replies/${post.id}`);
+        setReplies(d.replies);
+        setLoadError('');
+        setLikedPosts(new Set(d.replies.filter((reply: Post) => Boolean(reply.user_liked)).map((reply: Post) => reply.id)));
+        setLikeCounts(Object.fromEntries(d.replies.map((reply: Post) => [reply.id, Number(reply.like_count)])));
+      } catch {
+        setLoadError('返信は送信済みです。一覧を更新できませんでした。次の更新をお待ちください。');
+      }
     } catch (e: unknown) {
       setSendError(e instanceof Error ? e.message : '返信に失敗しました');
     }
@@ -96,16 +114,17 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
         </div>
 
         {/* 元投稿 */}
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid #2f3336' }}>
+        <div style={{ padding: '14px 16px' }}>
           <div style={{ display: 'flex', gap: 10 }}>
             <Avatar seed={post.avatar_seed} name={post.author_name} size={40} />
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
                 <span style={{ color: '#e7e9ea', fontWeight: 700, fontSize: 15 }}>{post.author_name}</span>
                 <span style={{ color: '#71767b', fontSize: 13 }}>@{post.author_handle}</span>
+                {onPostDeleted && <DeletePostButton post={post} currentUserId={currentUser.userId} onDeleted={deleted} />}
               </div>
               <p style={{ margin: '0 0 8px', color: '#e7e9ea', fontSize: 16, lineHeight: 1.6 }}>
-                {renderContent(post.content)}
+                {post.deleted_at ? <span style={{ color: '#71767b' }}>この投稿は削除されました</span> : renderContent(post.content)}
               </p>
               <span style={{ color: '#71767b', fontSize: 12 }}>{timeAgo(post.created_at)}</span>
             </div>
@@ -124,21 +143,22 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
             </div>
           )}
           {replies.map(r => (
-            <div key={r.id} style={{ padding: '12px 16px', marginLeft: Math.min(r.depth || 0, 3) * 12, borderBottom: '1px solid #1e2732', display: 'flex', gap: 10 }}>
+            <div key={r.id} style={{ padding: '12px 16px', marginLeft: Math.min(r.depth || 0, 3) * 12, display: 'flex', gap: 10 }}>
               <Avatar seed={r.avatar_seed} name={r.author_name} size={34} />
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', marginBottom: 3, flexWrap: 'wrap' }}>
                   <span style={{ color: '#e7e9ea', fontWeight: 600, fontSize: 14 }}>{r.author_name}</span>
                   <span style={{ color: '#71767b', fontSize: 12 }}>@{r.author_handle} · {timeAgo(r.created_at)}</span>
+                  {onPostDeleted && <DeletePostButton post={r} currentUserId={currentUser.userId} onDeleted={deleted} />}
                 </div>
                 <p style={{ margin: '0 0 8px', color: '#e7e9ea', fontSize: 14, lineHeight: 1.5 }}>
                   {r.reply_to && r.reply_to !== post.id && <small style={{ display: 'block', color: '#71767b' }}>
                     @{replies.find(parent => parent.id === r.reply_to)?.author_handle || post.author_handle} への返信
                   </small>}
-                  {renderContent(r.content)}
+                  {r.deleted_at ? <span style={{ color: '#71767b' }}>この投稿は削除されました</span> : renderContent(r.content)}
                 </p>
-                <button onClick={() => handleLikeReply(r.id)} style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
+                <button onClick={() => !r.synthetic && handleLikeReply(r.id)} disabled={r.synthetic || Boolean(r.deleted_at)} style={{
+                  background: 'none', border: 'none', cursor: r.synthetic ? 'default' : 'pointer',
                   color: likedPosts.has(r.id) ? '#f91880' : '#71767b',
                   display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, padding: 0,
                 }}>
@@ -146,16 +166,16 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
                     fill={likedPosts.has(r.id) ? '#f91880' : 'none'} stroke="currentColor" strokeWidth="1.8">
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                   </svg>
-                  {(likeCounts[r.id] || 0) > 0 && <span>{likeCounts[r.id]}</span>}
+                  {(likeCounts[r.id] || 0) > 0 && <span>{formatCount(likeCounts[r.id])}</span>}
                 </button>
-                <button onClick={() => setReplyTo(r)} style={{ marginTop: 8, background: 'none', border: 0, color: '#1d9bf0', cursor: 'pointer' }}>この投稿に返信</button>
+                {!r.synthetic && !r.deleted_at && !post.archived && <button onClick={() => setReplyTo(r)} style={{ marginTop: 8, background: 'none', border: 0, color: '#1d9bf0', cursor: 'pointer' }}>この投稿に返信</button>}
               </div>
             </div>
           ))}
         </div>
 
         {/* 返信入力 */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid #2f3336' }}>
+        {post.archived || replyTo.deleted_at || (replyTo.id === post.id && post.deleted_at) ? <p style={{ padding: 16, color: '#a6aeb7', fontSize: 13 }}>{post.archived ? '以前のテーマの投稿です。履歴として閲覧できます。' : '削除された投稿には返信できません。'}</p> : <div style={{ padding: '12px 16px', borderTop: '1px solid #2f3336' }}>
           <div style={{ display: 'flex', gap: 10 }}>
             <Avatar seed={undefined} name={currentUser.username} size={34} />
             <div style={{ flex: 1 }}>
@@ -183,7 +203,7 @@ export function ReplyPanel({ post, onClose, currentUser, onReplySent }: {
               </div>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

@@ -78,19 +78,25 @@ function getRequestInterval(target) {
   return readMilliseconds(target.provider.intervalEnv, target.provider.defaultIntervalMs);
 }
 
-function pacedFetch(target, url, opts) {
+function pacedFetch(target, url, opts, beforeSend) {
   const state = pacers.get(target.providerName) || { chain: Promise.resolve(), lastRequestAt: 0 };
   const signal = opts.signal;
-  const run = state.chain.then(async () => {
+  const execute = async () => {
     signal.throwIfAborted();
     const waitMs = Math.max(0, getRequestInterval(target) - (Date.now() - state.lastRequestAt));
     if (waitMs > 0) await require('node:timers/promises').setTimeout(waitMs, undefined, { signal });
     signal.throwIfAborted();
     if (isCoolingDown(target)) throw new Error('モデルはクールダウン中です');
+    // Recheck activity after pacing/queue waits, immediately before spending quota.
+    await beforeSend();
+    signal.throwIfAborted();
     state.lastRequestAt = Date.now();
     return fetch(url, opts);
-  });
-  state.chain = run.then(() => undefined, () => undefined);
+  };
+  // Do not retain another Worker request's I/O promises after that request ends.
+  const cloudflare = process.env.SOLOVERSE_RUNTIME === 'cloudflare';
+  const run = cloudflare ? execute() : state.chain.then(execute);
+  if (!cloudflare) state.chain = run.then(() => undefined, () => undefined);
   pacers.set(target.providerName, state);
   // 先行リクエストの完了待ちもタイムアウトに含める。期限切れのキュー項目は送信しない。
   return new Promise((resolve, reject) => {
@@ -173,7 +179,7 @@ async function callLLM(system, user, maxTokens = 1000, options = {}) {
 
 async function callLLMInternal(system, user, maxTokens, options) {
   const runtime = require('./llmRuntime');
-  const targets = await runtime.orderTargets(getTargets());
+  const targets = await runtime.orderTargets(getTargets().filter(target => !options.provider || target.providerName === options.provider));
   if (!targets.length) throw new Error('LLM APIキーが設定されていません。backend/.env を確認してください');
 
   // 呼び出し元のプロンプトに「JSON」という指示語が含まれるかどうかで、
@@ -211,8 +217,9 @@ async function callLLMInternal(system, user, maxTokens, options) {
     try {
       const request = buildProviderRequest(target, messages, maxTokens, controller.signal);
       const estimatedTokens = (system || '').length + user.length + Math.max(1024, maxTokens + 512);
-      attemptId = await runtime.beforeAttempt(target, options, estimatedTokens);
-      response = await pacedFetch(target, request.url, request.options);
+      response = await pacedFetch(target, request.url, request.options, async () => {
+        attemptId = await runtime.beforeAttempt(target, options, estimatedTokens);
+      });
       const responseText = await response.text();
       try {
         data = responseText ? JSON.parse(responseText) : {};
@@ -419,58 +426,15 @@ function safeParseJSON(raw) {
 /**
  * 世界設定から共通systemプロンプトを生成
  */
-function buildWorldSystemPrompt(settings, characterInfo = null, extraRules = []) {
-  const exclusions = (settings.exclusions || '').split(',').filter(Boolean);
-
-  const atmosphereRules = {
-    calm: [
-      '常に明るく優しいトーンで話す',
-      '相手の良いところを見つけて褒める',
-      '否定・批判・反論は絶対にしない',
-      '共感の言葉(「わかる!」「いいね!」「素敵!」)を積極的に使う',
-    ],
-    active: [
-      '意見をはっきり述べる(攻撃的にはならない)',
-      '「それってどういう意味?」「自分はこう思う」と議論を楽しむ',
-      '知的好奇心を示す質問や考察を投稿する',
-      '建設的な議論はOK、人格攻撃はNG',
-    ],
-    village: [
-      '「またね」「久しぶり!」「最近どう?」など常連感のある言葉を使う',
-      '他のキャラクターの名前を出して絡む(「@○○ それ前も言ってたよね!」)',
-      '小さなコミュニティの温かさを大切にする',
-      '新しい話題より、共通の趣味の深掘りをする',
-    ],
-    vent: [
-      '愚痴・疲れた・もう限界、などの感情吐き出しOK',
-      '相手の愚痴には「わかる〜辛いね」「それは無理だわ」と共感する',
-      '感情を率直に表現する(ただし犯罪・暴力はNG)',
-      'テンションが高かったり低かったりしていい',
-      '愚痴は許容されるだけで必須ではない。全員が絶望・疲労を口にしない',
-    ],
-  }[settings.atmosphere] || ['常に友好的で建設的な投稿をする'];
-
-  const positionRules = {
-    empathy: [
-      'ユーザーの投稿には必ず共感の言葉で反応する',
-      '「わかる」「自分もそう思う」「大丈夫?」と寄り添う',
-      'ユーザーをスターとして扱わない・対等な友人として接する',
-    ],
-    admired: [
-      'ユーザーの投稿には興奮・称賛・羨望で反応する',
-      '「すごい!」「さすがです!」「真似したい!」と持ち上げる',
-      'ユーザーをインフルエンサー・憧れの存在として尊敬する',
-      'リプライは熱量高めで、ファンらしい口調にする',
-    ],
-    observer: [
-      'ユーザーの投稿には控えめに反応する(毎回ではない)',
-      '反応は控えめ。ただし質問を受けたら相槌だけで済ませず、具体的に答える',
-      '自分たちのコミュニティの話題で盛り上がることが多い',
-    ],
-  }[settings.position] || [];
+function buildWorldSystemPrompt(settings, characterInfo = null, extraRules = [], { purpose = 'conversation' } = {}) {
+  const { resolveMode, LABELS, experienceRules, atmosphereRules: modeAtmosphereRules } = require('./worldModes');
+  const mode = resolveMode(settings);
+  const exclusions = String(settings.exclusions || '').split(',').filter(Boolean);
+  const atmosphereRules = modeAtmosphereRules(settings);
+  const positionRules = experienceRules(settings);
 
   const hardBans = [
-    '【絶対禁止】違法行為・ハッキング・不正アクセス・犯罪・薬物の話題',
+    '【絶対禁止】犯罪の実行支援・不正アクセスの具体的な手順・違法薬物の売買の勧誘',
     '【絶対禁止】暴力・脅迫・差別・ヘイトスピーチ',
   ];
   if (exclusions.includes('no_criticism'))  hardBans.push('【絶対禁止】批判・否定・悪口・皮肉・嫌み');
@@ -489,23 +453,25 @@ function buildWorldSystemPrompt(settings, characterInfo = null, extraRules = [])
     '「The user wants」「〜を生成します」等のタスクの復唱・前置きは書かない',
     '文字数を1文字ずつ数える行為(例:「あ(1) い(2)」)はしない。文字数指定は目安として守るだけでよい',
     '本文は自然な日本語。JSONキー、ユーザー名、作品の正式名称は英字でもよい',
-    '質問には先に結論を答え、具体的な理由を一つ添える。曖昧なら短く確認する',
+    mode === 'hobby' ? '質問には先に答え、必要なら具体的な理由を一つ添える。曖昧なら短く確認する' : '質問には内容に直接答える。すべての投稿を説明文や結論と理由の定型文にしない',
+    '作品の台詞・名言は、入力に原文がない限り引用しない。場面や行動を自分の言葉で説明する',
     '同じ茶・コーヒー・天気の話や抽象的な比喩を繰り返さない。具体的な場面・体験・好みを一つ述べる',
     '返信先が指定されたら、その投稿の内容に直接答える。無関係な話題へ逸らさない',
-    '興味・関心にロールプレイやなりきりが明示されていなければ、作品を楽しむファンとして会話する。作品世界の出来事を自分の現実の体験として語らない',
+    '作品を扱うテーマでは、ロールプレイやなりきりが明示されていなければ作品を楽しむファンとして会話する。作品世界の出来事を自分の現実の体験として語らない',
     '既存の表示名は維持する。新しく作る人物の名前・ユーザー名・経歴に、原作人物・地名・組織・アイテム名やそのもじりを使わない',
     '作品テーマの悪い例:「宇宙船で旅をしている」「魔法学校へ通っている」。良い例:「宇宙船の登場シーンを映画館で観た」「魔法学校の設定を考察している」',
   ];
 
-  return `あなたはSNS「SoloVerse」のAIキャラクターです。
+  return `${purpose === 'residents' ? 'あなたはSNS「SoloVerse」の架空の利用者を設計する担当です。演技的なキャラ設定を増やさず、自然なSNS利用者を作ります。' : 'あなたはSNS「SoloVerse」の架空のSNS利用者です。'}
+【体験モード】${LABELS[mode]}
 ${charSection}
-【テーマ・趣味(必ずこれに関連した内容を投稿する)】
+【テーマ・趣味・役割・界隈】
 ${settings.interests}
 
 【コミュニティの雰囲気(必ず守る行動ルール)】
 ${atmosphereRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
-【ユーザーへの接し方(必ず守る)】
+【体験と接し方のルール】
 ${positionRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
 【絶対禁止事項(いかなる場合も違反しない)】

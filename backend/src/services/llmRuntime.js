@@ -1,15 +1,21 @@
 // One runner: priority admission, persistent quota reservations, and content-free telemetry.
 const { randomUUID } = require('node:crypto');
 const { enabled, config } = require('./contentConfig');
+const { isGenerationActive, activeGenerationSQL } = require('./generationActivity');
 let db;
 let active = false;
 const waiting = [];
 function attachDatabase(client) { db = client; }
 class DeferredError extends Error {
-  constructor(reason) { super(reason); this.code = 'LLM_DEFERRED'; }
+  constructor(reason, retryAt) {
+    super(reason); this.code = 'LLM_DEFERRED';
+    const nextDay = Math.floor(Date.now() / 86400000) * 86400000 + 86400000;
+    this.retryAt = new Date(retryAt || (reason === 'daily_budget' ? nextDay : Date.now() + 60000)).toISOString();
+  }
 }
 function schedule(options, task) {
-  if (!enabled()) return task();
+  // Worker invocations have separate lifetimes. The D1 world lease serializes work there.
+  if (!enabled() || process.env.SOLOVERSE_RUNTIME === 'cloudflare') return task();
   return new Promise((resolve, reject) => {
     waiting.push({ task, resolve, reject, priority: options.priority === 'background' ? 1 : 0 });
     drain();
@@ -24,27 +30,40 @@ async function drain() {
   finally { active = false; drain(); }
 }
 async function beforeAttempt(target, options, estimatedTokens) {
+  // Include admission, result accounting and fallback bookkeeping before sending.
+  db?.requireQueryBudget?.(8);
+  if (options.userId && !await isGenerationActive(options.userId)) throw new DeferredError('user_inactive');
   if (!enabled() || !db) return null;
   const cfg = config();
   const isBackground = options.priority === 'background';
   if (isBackground) {
-    const replies = await db.execute("SELECT 1 FROM reaction_queue WHERE done=0 AND reaction_type='reply' AND datetime(scheduled_at)<=datetime('now','+3 minutes') LIMIT 1");
+    const replies = await db.execute(`SELECT 1 FROM reaction_queue rq WHERE done=0 AND reaction_type='reply'
+      AND ${activeGenerationSQL('rq.user_id')} AND datetime(scheduled_at)<=datetime('now','+3 minutes') LIMIT 1`);
     if (waiting.some(item => item.priority === 0) || replies.rows.length) throw new DeferredError('reply_priority');
   }
-  const usage = (await db.execute("SELECT COUNT(*) AS requests, COALESCE(SUM(tokens),0) AS tokens FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')")).rows[0];
+  // One read per target keeps a three-provider waterfall within the Worker query budget.
+  const usage = (await db.execute({ sql: `SELECT COUNT(*) AS requests, COALESCE(SUM(tokens),0) AS tokens,
+    (SELECT json_object('remaining_requests',remaining_requests,'remaining_tokens',remaining_tokens,
+      'reset_requests_at',reset_requests_at,'reset_tokens_at',reset_tokens_at)
+      FROM llm_provider_limits WHERE provider=? AND model=?) AS provider_limits
+    FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')`,
+    args: [target.providerName, target.model] })).rows[0];
   const fraction = isBackground ? 1 - cfg.replyReserve : 1;
   if (Number(usage.requests) >= Math.floor(cfg.dailyRequests * fraction)
     || Number(usage.tokens) + estimatedTokens > cfg.dailyTokens * fraction) throw new DeferredError('daily_budget');
-  const latest = (await db.execute({
-    sql: 'SELECT * FROM llm_provider_limits WHERE provider=? AND model=?', args: [target.providerName, target.model],
-  })).rows[0];
-  if (latest && ((latest.remaining_requests === 0 && latest.reset_requests_at > Date.now())
-    || (latest.remaining_tokens != null && latest.remaining_tokens < estimatedTokens && latest.reset_tokens_at > Date.now()))) {
-    throw new DeferredError('provider_quota');
-  }
+  const latest = usage.provider_limits ? JSON.parse(usage.provider_limits) : null;
+  const resets = latest ? [
+    latest.remaining_requests === 0 && latest.reset_requests_at,
+    latest.remaining_tokens != null && latest.remaining_tokens < estimatedTokens && latest.reset_tokens_at,
+  ].filter(time => time > Date.now()) : [];
+  if (resets.length) throw new DeferredError('provider_quota', Math.max(...resets) + 1000);
   const id = randomUUID();
-  await db.execute({ sql: `INSERT INTO llm_attempts(id,user_id,job,priority,provider,model,outcome,tokens,estimated,created_at)
-    VALUES(?,?,?,?,?,?,'running',?,1,?)`, args: [id, options.userId || null, options.job || 'unspecified', isBackground ? 'background' : 'interactive', target.providerName, target.model, estimatedTokens, new Date().toISOString()] });
+  const reserved = await db.execute({ sql: `INSERT INTO llm_attempts(id,user_id,job,priority,provider,model,outcome,tokens,estimated,created_at)
+    SELECT ?,?,?,?,?,?,'running',?,1,? WHERE
+    (SELECT COUNT(*) FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')) < ? AND
+    (SELECT COALESCE(SUM(tokens),0) FROM llm_attempts WHERE created_at>=strftime('%Y-%m-%dT00:00:00.000Z','now')) + ? <= ?
+    RETURNING id`, args: [id, options.userId || null, options.job || 'unspecified', isBackground ? 'background' : 'interactive', target.providerName, target.model, estimatedTokens, new Date().toISOString(), Math.floor(cfg.dailyRequests*fraction),estimatedTokens,cfg.dailyTokens*fraction] });
+  if (!reserved.rows.length) throw new DeferredError('daily_budget');
   return id;
 }
 function resetTime(value) {
@@ -87,6 +106,7 @@ async function orderTargets(targets) {
 }
 async function recordContent(userId, job, outcome, reason, scores = {}) {
   if (!enabled() || !db) return;
+  if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') { db.bufferContent([userId,job,outcome,reason,JSON.stringify(scores),new Date().toISOString()]); return; }
   await db.execute({ sql: 'INSERT INTO content_events(user_id,job,outcome,reason,scores,created_at) VALUES(?,?,?,?,?,?)',
     args: [userId, job, outcome, reason, JSON.stringify(scores), new Date().toISOString()] });
 }

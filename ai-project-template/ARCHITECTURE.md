@@ -134,6 +134,7 @@ Important services:
 - `llm.js`: Expands configured providers into ordered model targets, paces calls per provider, applies request and total timeouts, cooldowns failing targets, strips obvious reasoning leakage, and validates JSON-shaped outputs when requested.
 - `worldGenerator.js`: Calls the LLM in two batches of five residents, normalizes fields, prevents duplicate usernames within the generated set, and requires at least three valid residents.
 - `reactionScheduler.js`: Schedules delayed likes/replies, guarantees a prompt reply for detected questions/calls, repairs missed recent direct replies, processes retryable queue items, and creates initial seed posts.
+- `celebrityMode.js`: Treats `position=admired` as a separate backend mode, creates deterministic large-audience count curves, asks one LLM director for eight representative comments, and never materializes the simulated audience as resident or like rows.
 - `autonomousEngine.js`: Produces autonomous posts and reply chains, aggregates hashtags without an LLM, adds one or two residents after six hours up to 20, and generates absence reactions after 24 hours.
 - `worldTasks.js`: Serializes work for the same user inside one Node process. It is not a distributed lock.
 
@@ -144,6 +145,7 @@ Background schedule:
 | Reaction queue | 30 seconds | Due queue rows, up to 20 per pass |
 | Autonomous engine dispatcher | 5 minutes | Enhanced: refill if <=2 pending and 30-minute pacing permits; legacy: configured interval, default 15 minutes |
 | Candidate publisher | 30 seconds, after replies | Enhanced only, at most 8 due candidates per world per pass |
+| Celebrity audience director | 30 seconds, after normal queue | Pending `admired` scenes, at most 3 per pass; one batched LLM call per post |
 | Trend aggregation | Checked every 5 minutes | Last 7 days, up to 500 posts, top 3 hashtags |
 | Resident growth | Checked every 5 minutes | At least 6 hours since prior growth, max 20 residents |
 | Absence reaction | Checked every 5 minutes | After 24 hours without user post; deduplicated for 48 hours |
@@ -170,6 +172,8 @@ Important tables:
 | `trends` | Per-user top hashtags and counts |
 | `character_growth_log` | Compatibility/audit log for added residents |
 | `autonomous_log` | Last autonomous, trend, and growth timestamps per user |
+| `celebrity_scenes` | One aggregate audience plan and growth target per celebrity-mode user post |
+| `celebrity_comments` | At most eight representative audience comments per scene; not resident accounts |
 
 Relationships:
 

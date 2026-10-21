@@ -1,13 +1,4 @@
-const { createClient } = require('@libsql/client');
-const path = require('path');
-
-const databasePath = process.env.DB_PATH
-  ? path.resolve(process.env.DB_PATH)
-  : path.join(__dirname, '../../soloverse.db');
-
-const db = createClient({
-  url: `file:${databasePath}`
-});
+const { db, databasePath } = require('./client');
 
 async function initDB() {
   await db.execute('PRAGMA foreign_keys = ON');
@@ -153,8 +144,14 @@ async function initDB() {
   await migrateCascade();
   await migrateAutonomousLogGrowth();
   await migrateReactionQueueAttempts();
+  const postColumns = (await db.execute('PRAGMA table_info(posts)')).rows;
+  if (!postColumns.some(column => column.name === 'deleted_at')) await db.execute('ALTER TABLE posts ADD COLUMN deleted_at TEXT');
+  const queueColumns = (await db.execute('PRAGMA table_info(reaction_queue)')).rows;
+  if (!queueColumns.some(column => column.name === 'reply_priority')) await db.execute('ALTER TABLE reaction_queue ADD COLUMN reply_priority INTEGER NOT NULL DEFAULT 0');
   await createIndexes();
   await require('./contentSchema').initContentSchema(db);
+  await require('./celebritySchema').initCelebritySchema(db);
+  await require('../services/generationActivity').initActivitySchema();
 
   console.log('DB initialized');
 }

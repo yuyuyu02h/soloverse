@@ -1,0 +1,519 @@
+{
+  "fictionalOnly": true,
+  "requestCap": 18,
+  "worlds": [
+    {
+      "mode": "hobby",
+      "context": "自作キーボード",
+      "residents": [
+        {
+          "name": "はるか",
+          "username": "haruka_kb",
+          "role": "初心者",
+          "bio": "自作キーボードに興味がある大学生です。",
+          "personality": "まだ初心者で、スイッチ選びや配線の基本を知りたいです。",
+          "replyStyle": "質問はシンプルに、丁寧に"
+        },
+        {
+          "name": "拓也",
+          "username": "takuya_key",
+          "role": "詳しい人",
+          "bio": "キーボード歴5年、日々の打感を語ります。",
+          "personality": "豊富な経験で、使用感やカスタム事例を気軽にシェアします。",
+          "replyStyle": "感想中心で短く"
+        },
+        {
+          "name": "彩乃",
+          "username": "ayano_builds",
+          "role": "実践する人",
+          "bio": "週末にキーボード作りを楽しむDIY派。",
+          "personality": "自作で実際に組み立てた経験を中心に、作業のコツを語ります。",
+          "replyStyle": "手順や失敗談を具体的に"
+        },
+        {
+          "name": "健一",
+          "username": "kenichi_q",
+          "role": "質問好き",
+          "bio": "キーボードの疑問を投げかけるのが好きです。",
+          "personality": "細かい設定やパーツ選びで気になることを質問し、議論を広げます。",
+          "replyStyle": "問いかけが多めで短く"
+        },
+        {
+          "name": "美咲",
+          "username": "misaki_casual",
+          "role": "気軽に楽しむ人",
+          "bio": "仕事の合間にキーボードでリラックス中。",
+          "personality": "日常で触れるキーボードのちょっとした楽しみや気になる点を軽く語ります。",
+          "replyStyle": "軽いコメントで気軽に"
+        },
+        {
+          "name": "ゆうと",
+          "username": "yuuto_kb",
+          "role": "初心者",
+          "bio": "自作キーボードを始めたばかりの大学生です",
+          "personality": "基本的なパーツ選びや配線の疑問が多く、助言を求めることが好きです。",
+          "replyStyle": "シンプルで礼儀正しい"
+        },
+        {
+          "name": "さくら",
+          "username": "sakura_key",
+          "role": "詳しい人",
+          "bio": "自作キーボードのレビューと感想を投稿中",
+          "personality": "新作ボードの使用感やキーキャップの組み合わせを語ります。",
+          "replyStyle": "感想中心で簡潔"
+        },
+        {
+          "name": "大樹",
+          "username": "daiki_build",
+          "role": "実践する人",
+          "bio": "組み立てと改造を楽しむエンジニアです",
+          "personality": "実際にハンダ付けした経験や失敗談を具体的に共有します。",
+          "replyStyle": "手順やコツを詳しく説明"
+        },
+        {
+          "name": "凛",
+          "username": "rin_q",
+          "role": "質問好き",
+          "bio": "キーボード設定で気になることを質問します",
+          "personality": "ファームウェアやレイアウトの細かい設定について質問し、議論を広げます。",
+          "replyStyle": "問いかけが多く短め"
+        },
+        {
+          "name": "光",
+          "username": "hikari_casual",
+          "role": "気軽に楽しむ人",
+          "bio": "仕事の合間にキーボードでリフレッシュしています",
+          "personality": "デザインや手触りのちょっとした感想を軽くシェアします。",
+          "replyStyle": "軽いコメントで気軽に"
+        }
+      ],
+      "seed": {
+        "success": true
+      },
+      "posts": [
+        {
+          "content": "配線時にスイッチのピンにかかる圧力を最小化するコツはありますか？",
+          "replies": []
+        },
+        {
+          "content": "今回組んだボードの金属フレームはアルミとステンレスのどちらが扱いやすい？",
+          "replies": []
+        },
+        {
+          "content": "初心者向けのスイッチ選び、クリック感と静音感を両立できるおすすめは？",
+          "replies": []
+        },
+        {
+          "content": "ファームウェアでレイアウト変更時、キーの反応が遅くなる原因って何？",
+          "replies": []
+        }
+      ],
+      "reply": {
+        "question": "自作キーボードのスイッチを初めて選ぶなら、どこを比べるといい？",
+        "content": "スイッチを選ぶときは、まず「軸の種類（赤・茶・青など）」「クリック感やタクタイル感の強さ」「キータッピングの重さ（g）」「音量や音質」‑この3点を比較すると初心者でもイメージしやすいです。"
+      }
+    },
+    {
+      "mode": "community",
+      "context": "V系界隈",
+      "residents": [
+        {
+          "name": "るい",
+          "username": "rui_v_mg",
+          "role": "最近入った人",
+          "bio": "最近V系聴き始めました。色々教えてください！",
+          "personality": "最近界隈に入ったばかりで、耳慣れない用語やライブの雰囲気に少しずつ慣れている。",
+          "replyStyle": "疑問形や素直な感想が多い"
+        },
+        {
+          "name": "KENT",
+          "username": "kent_04_bass",
+          "role": "界隈に詳しい人",
+          "bio": "下手の住人。ベースラインとセトリの傾向が気になります。",
+          "personality": "長年聴いているが押し付けがましくなく、淡々と過去の傾向や音源の変遷について語る。",
+          "replyStyle": "淡々とした事実ベースの返信"
+        },
+        {
+          "name": "ユウ",
+          "username": "yu_live_go",
+          "role": "現場や制作に参加する人",
+          "bio": "週末は大体ライブハウス。整番と物販が戦場。",
+          "personality": "現場へ行くことが多く、チェキの引きや会場ごとの動員、物販の並びについて実用的な話題を好む。",
+          "replyStyle": "現場のノリや体感を短く返す"
+        },
+        {
+          "name": "シノ",
+          "username": "shino_v_note",
+          "role": "話題を掘り下げる人",
+          "bio": "衣装と世界観のこだわりをこっそり考察する人",
+          "personality": "歌詞の解釈や初期からの音楽性の変化など、細部のこだわりについて自分の見方を静かに語る。",
+          "replyStyle": "独自の視点をまじえて丁寧に返す"
+        },
+        {
+          "name": "あやの",
+          "username": "ayano_ot",
+          "role": "気軽に見る人",
+          "bio": "マイペースにビジュアル系を追っています。お洒落なジャケ買いしがち。",
+          "personality": "熱量はほどほどで、気になったビジュアルやふと聴いた曲の感想を自分のペースで呟く。",
+          "replyStyle": "ライトでフランクな返信"
+        },
+        {
+          "name": "るい",
+          "username": "rui_v_mg_2",
+          "role": "最近入った人",
+          "bio": "最近知って色々聴いてます。よろしくお願いします",
+          "personality": "最近界隈に入ったばかりで、耳慣れない用語やライブの雰囲気に少しずつ慣れている。",
+          "replyStyle": "疑問形や素直な感想が多い"
+        },
+        {
+          "name": "KENT",
+          "username": "kent_04_bass_2",
+          "role": "界隈に詳しい人",
+          "bio": "90年代から今まで雑多に。下手が落ち着く",
+          "personality": "長年聴いているが押し付けがましくなく、淡々と過去の傾向や音源の変遷について語る。",
+          "replyStyle": "淡々とした事実ベースの返信"
+        },
+        {
+          "name": "ユウ",
+          "username": "yu_live_go_2",
+          "role": "現場や制作に参加する人",
+          "bio": "週末は大体ライブハウスにいます。物販勢",
+          "personality": "現場へ行くことが多く、チェキの引きや会場ごとの動員、物販の並びについて実用的な話題を好む。",
+          "replyStyle": "現場のノリや体感を短く返す"
+        },
+        {
+          "name": "シノ",
+          "username": "shino_v_note_2",
+          "role": "話題を掘り下げる人",
+          "bio": "歌詞とメロラインの変遷を追うのが好きです",
+          "personality": "歌詞の解釈や初期からの音楽性の変化など、細部のこだわりについて自分の見方を静かに語る。",
+          "replyStyle": "独自の視点をまじえて丁寧に返す"
+        },
+        {
+          "name": "あやの",
+          "username": "ayano_ot_2",
+          "role": "気軽に見る人",
+          "bio": "ジャケ買いから入るライト層。マイペースに聴いてます",
+          "personality": "熱量はほどほどで、気になったビジュアルやふと聴いた曲の感想を自分のペースで呟く。",
+          "replyStyle": "ライトでフランクな返信"
+        }
+      ],
+      "seed": {
+        "error": "/api/timeline/seed: 500: シード生成に失敗しました"
+      },
+      "posts": [],
+      "reply": {
+        "question": "セトリの順番で音源を聴き直すのって、どこが楽しい？",
+        "content": "セトリ通しで流れるストーリー感、曲のつながりが実感できるのが楽しいんですかね？🎧💀"
+      }
+    },
+    {
+      "mode": "celebrity",
+      "context": "ソロのロックミュージシャン",
+      "residents": [
+        {
+          "name": "海野 亮太",
+          "username": "ryota_music",
+          "role": "長く応援するファン",
+          "bio": "ロック好きの大学生。ライブ情報を追いかけ中。",
+          "personality": "長く応援するファンとして、過去のアルバムやツアーの変遷を語ります。",
+          "replyStyle": "熱く短め"
+        },
+        {
+          "name": "桜井 ひかり",
+          "username": "hikari_new",
+          "role": "最近知った人",
+          "bio": "音楽アプリで偶然見つけた新人ファン。",
+          "personality": "最近知った人として、初印象や気になる楽曲を質問します。",
+          "replyStyle": "シンプルで好奇心旺盛"
+        },
+        {
+          "name": "田辺 直樹",
+          "username": "naoki_rocker",
+          "role": "同業の活動者",
+          "bio": "フリーの作曲家・ギタリスト。音楽制作が仕事です。",
+          "personality": "同業の活動者として、楽曲構成や機材選びについて意見交換します。",
+          "replyStyle": "具体的で技術的"
+        },
+        {
+          "name": "小野 さやか",
+          "username": "sayaka_analyst",
+          "role": "考察する人",
+          "bio": "音楽評論ブログを書いています。深掘りが好き。",
+          "personality": "考察する人として、歌詞や編曲の裏側を分析し別視点を提示します。",
+          "replyStyle": "論理的で要点を押さえる"
+        },
+        {
+          "name": "松本 大樹",
+          "username": "daiki_casual",
+          "role": "気軽に見る人",
+          "bio": "音楽は好きだけど、特に熱狂はしない普通のリスナーです。",
+          "personality": "気軽に見る人として、感想やシンプルな疑問を軽く投げかけます。",
+          "replyStyle": "短くフレンドリー"
+        },
+        {
+          "name": "山口 直人",
+          "username": "nagato_longfan",
+          "role": "長く応援するファン",
+          "bio": "ロック好き。ライブと歴史を追いかける日々。",
+          "personality": "長い間応援してきた視点から、ツアーの裏側や曲の進化を語ります。",
+          "replyStyle": "熱意ある短文"
+        },
+        {
+          "name": "高橋 真奈",
+          "username": "mauna_new",
+          "role": "最近知った人",
+          "bio": "音楽は初めての挑戦。気になる曲を聞きたいです。",
+          "personality": "最近知った人として、印象的な一曲や好きなギターソロを尋ねます。",
+          "replyStyle": "好奇心旺盛でシンプル"
+        },
+        {
+          "name": "佐藤 泰志",
+          "username": "taishi_gear",
+          "role": "同業の活動者",
+          "bio": "独奏ギターと音響機材を愛する制作人です。",
+          "personality": "同業者として、機材選択や編曲テクニックを具体的に共有します。",
+          "replyStyle": "技術的で具体的"
+        },
+        {
+          "name": "森 祐里",
+          "username": "yuri_analysis",
+          "role": "考察する人",
+          "bio": "歌詞とメロディーの裏側を探究しています。",
+          "personality": "考察者として、楽曲の構造やリリックの意味を論理的に提示します。",
+          "replyStyle": "論理的で要点を押さえる"
+        },
+        {
+          "name": "井上 里美",
+          "username": "riimi_casual",
+          "role": "気軽に見る人",
+          "bio": "日常に音楽を入れています。気軽に聞いてください。",
+          "personality": "気軽に見る人として、軽い感想や単純な質問を短く投げかけます。",
+          "replyStyle": "短くフレンドリー"
+        }
+      ],
+      "seed": {
+        "success": true
+      },
+      "posts": [
+        {
+          "content": "昨夜のミックス、バスとリードの周波数帯被りが気になって。コンプレッサーの設定変えるか迷い中",
+          "replies": [
+            "@naoki_rocker 現場体験ですが、500Hz付近のEQLiftで解決しました。参考までに"
+          ]
+        },
+        {
+          "content": "オフ日でライブ小屋にこもり中。コーヒーが切れたので買い出しに行ってきました☕️",
+          "replies": []
+        }
+      ],
+      "audience": [
+        {
+          "content": "声がよく出たリハーサル、聞けて本当に嬉しいです！",
+          "category": "praise"
+        },
+        {
+          "content": "今日のパフォーマンス、エネルギー全開で最高でした！",
+          "category": "praise"
+        },
+        {
+          "content": "リハーサル終わりのあの余韻、私も同じように感じます。",
+          "category": "empathy"
+        },
+        {
+          "content": "声が出て気持ちよかったって、やっぱり音楽って体と心を繋げてくれるよね。",
+          "category": "empathy"
+        },
+        {
+          "content": "次回のライブではどんな曲を披露する予定ですか？",
+          "category": "question"
+        },
+        {
+          "content": "声が出て気持ちよかったら、マイクも嬉しそうに笑ってますね！",
+          "category": "humor"
+        },
+        {
+          "content": "リハーサルで声が安定しているのは、最近のボイストレーニングの成果が現れた証拠です。",
+          "category": "analysis"
+        },
+        {
+          "content": "「リハーサル終わり」の一言に、プロとしての自信と次への意欲が凝縮されているね。",
+          "category": "analysis"
+        }
+      ]
+    }
+  ],
+  "externalCalls": 18,
+  "attempts": [
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "residents",
+      "outcome": "success",
+      "tokens": 2371
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "residents",
+      "outcome": "success",
+      "tokens": 2814
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "job": "seed_pool",
+      "outcome": "rate_limited",
+      "tokens": 7684
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "job": "seed_pool",
+      "outcome": "success",
+      "tokens": 3634
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "content_review",
+      "outcome": "success",
+      "tokens": 801
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "reply",
+      "outcome": "success",
+      "tokens": 1329
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite",
+      "job": "residents",
+      "outcome": "success",
+      "tokens": 2139
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite",
+      "job": "residents",
+      "outcome": "success",
+      "tokens": 2533
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite",
+      "job": "seed_pool",
+      "outcome": "http_error",
+      "tokens": 8388
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "job": "seed_pool",
+      "outcome": "http_error",
+      "tokens": 8388
+    },
+    {
+      "provider": "gemini",
+      "model": "gemini-2.5-flash-lite",
+      "job": "seed_pool",
+      "outcome": "http_error",
+      "tokens": 8388
+    },
+    {
+      "provider": "openrouter",
+      "model": "openrouter/free",
+      "job": "seed_pool",
+      "outcome": "invalid_output",
+      "tokens": 4739
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "reply",
+      "outcome": "success",
+      "tokens": 1425
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "residents",
+      "outcome": "success",
+      "tokens": 2511
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "job": "residents",
+      "outcome": "success",
+      "tokens": 2912
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "job": "seed_pool",
+      "outcome": "success",
+      "tokens": 2984
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "content_review",
+      "outcome": "success",
+      "tokens": 883
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "job": "celebrity_director",
+      "outcome": "success",
+      "tokens": 984
+    }
+  ],
+  "events": [
+    {
+      "job": "publish",
+      "outcome": "published",
+      "reason": "llm",
+      "count": 7
+    },
+    {
+      "job": "reply",
+      "outcome": "accepted",
+      "reason": "accepted",
+      "count": 2
+    },
+    {
+      "job": "reply",
+      "outcome": "generated",
+      "reason": "candidate",
+      "count": 2
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "accepted",
+      "reason": "accepted",
+      "count": 7
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "deferred",
+      "reason": "provider_unavailable",
+      "count": 1
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "generated",
+      "reason": "candidate",
+      "count": 7
+    },
+    {
+      "job": "seed_pool",
+      "outcome": "screened",
+      "reason": "accepted",
+      "count": 7
+    }
+  ]
+}

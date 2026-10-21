@@ -7,6 +7,7 @@ const { randomUUID } = require('node:crypto');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sv-content-'));
 process.env.DB_PATH = path.join(dir, 'test.db');
 process.env.CONTENT_PIPELINE = 'enhanced';
+process.env.CONTENT_REVIEW = 'false';
 process.env.LLM_PROVIDER_ORDER = 'groq';
 process.env.GROQ_API_KEY = 'test-only';
 process.env.GROQ_MODELS = 'content-test';
@@ -46,6 +47,7 @@ test.beforeEach(async () => {
   await db.batch(['DELETE FROM users', 'DELETE FROM llm_attempts', 'DELETE FROM llm_provider_limits'], 'write');
   for (const user of ['owner', 'other']) {
     await db.execute({ sql: 'INSERT INTO users(id,email,password_hash,username,onboarding_done) VALUES(?,?,?,?,1)', args: [user, `${user}@test.invalid`, 'unused', user] });
+    await require('../src/services/generationActivity').touchSession(user, `fixture-${user}`);
     await db.execute({ sql: 'INSERT INTO world_settings VALUES(?,?,?,?,?,?)', args: [user, 'observer', '映画', 'calm', '', 'small'] });
     for (let i = 0; i < 2; i++) await db.execute({ sql: 'INSERT INTO ai_characters(id,user_id,name,username,avatar_seed,personality,interests,reply_style,reaction_frequency,delay_profile) VALUES(?,?,?,?,?,?,?,?,?,?)', args: [user + i, user, '住人' + i, `resident_${i}`, 'seed', '映画を丁寧に観る', '映画,音楽', '理由を添える', 'low', 'fast'] });
   }
@@ -214,7 +216,8 @@ test('legacy switch stops candidate publication and returns original seed behavi
   assert.equal((await db.execute('SELECT * FROM content_candidates')).rows.length, 4);
 });
 
-test('templates are optional, capped, and do not call APIs when budget exhausted', async () => {
+test('hobby templates are optional, capped, and do not call APIs when budget exhausted', async () => {
+  await db.execute("UPDATE world_settings SET position='empathy' WHERE user_id='owner'");
   process.env.CONTENT_TEMPLATES = 'true';
   process.env.LLM_DAILY_TOKEN_BUDGET = '100';
   for (let i = 0; i < 4; i++) {
@@ -247,4 +250,144 @@ test('concurrent seed uses one pool; clearing world cascades profile/memory/cand
   await db.execute("DELETE FROM ai_characters WHERE user_id='owner'");
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM resident_profiles WHERE user_id='owner'")).rows[0].n, 0);
   assert.equal((await db.execute("SELECT COUNT(*) AS n FROM content_candidates WHERE user_id='owner'")).rows[0].n, 0);
+});
+
+
+test('celebrity seed reports quota waiting and retries at provider reset instead of waiting thirty minutes', async () => {
+  await db.execute("UPDATE world_settings SET position='admired' WHERE user_id='owner'");
+  const resetAt = Date.now() + 20000;
+  await db.execute({sql:'INSERT INTO llm_provider_limits(provider,model,remaining_requests,remaining_tokens,reset_tokens_at,observed_at) VALUES(?,?,?,?,?,?)',args:['groq',process.env.GROQ_MODELS,100,0,resetAt,new Date().toISOString()]});
+  await assert.rejects(seedEnhanced('owner'), error => error.code==='LLM_DEFERRED' && error.message==='provider_quota' && Date.parse(error.retryAt)===resetAt+1000);
+  assert.equal(requests.length,0);
+  const state=(await db.execute("SELECT * FROM content_pool_state WHERE user_id='owner'")).rows[0];
+  assert.equal(state.defer_reason,'provider_quota');
+  assert.equal(Date.parse(state.next_fill_at),resetAt+1000);
+  await assert.rejects(seedEnhanced('owner'), error => error.message==='provider_quota');
+  assert.equal(requests.length,0);
+  await db.execute("UPDATE llm_provider_limits SET reset_tokens_at=0");
+  await db.execute("UPDATE content_pool_state SET next_fill_at='2000-01-01'");
+  assert.ok(await seedEnhanced('owner')>0);
+  assert.equal(requests.length,1);
+  assert.equal((await db.execute("SELECT COUNT(*) n FROM posts WHERE user_id='owner' AND author_type='ai'")).rows[0].n,4);
+});
+
+test('initial seed is small and omits internal profile fingerprints from prompts', async () => {
+  process.env.CONTENT_POOL_SIZE='12';
+  try {
+    assert.ok(await seedEnhanced('owner')>0);
+    const prompt=requests[0].messages.at(-1).content;
+    assert.ok(prompt.includes('日常投稿を4件だけ'));
+    assert.ok(!prompt.includes('fingerprint'));
+  } finally { process.env.CONTENT_POOL_SIZE='4'; }
+});
+
+test('review quota waiting preserves unreviewed stock and does not publish it until reviewed', async () => {
+  process.env.CONTENT_REVIEW='true';
+  responses=[{content:candidates(),headers:{'x-ratelimit-remaining-tokens':'0','x-ratelimit-reset-tokens':'20s'}}];
+  try {
+    await assert.rejects(seedEnhanced('owner'), error=>error.code==='LLM_DEFERRED' && error.message==='provider_quota');
+    assert.equal(requests.length,1);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM content_candidates WHERE user_id='owner' AND reviewed=0 AND state='pending'")).rows[0].n,4);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM posts WHERE user_id='owner'")).rows[0].n,0);
+    await db.execute('UPDATE llm_provider_limits SET reset_tokens_at=0');
+    responses=[{content:[0,1,2,3].map(index=>({index,accepted:true,reason:'accepted'}))}];
+    assert.equal(await seedEnhanced('owner'),4);
+    assert.equal(requests.length,2);
+  } finally { process.env.CONTENT_REVIEW='false'; }
+});
+
+const rejectedReview = () => [0,1,2,3].map(index => ({index,accepted:false,reason:'off_topic'}));
+async function seedWait(reason, minimum, maximum) {
+  const start = Date.now();
+  let waiting;
+  await assert.rejects(seedEnhanced('owner'), error => {
+    waiting = error;
+    return error.code === 'LLM_DEFERRED' && error.message === reason;
+  });
+  assert.ok(Date.parse(waiting.retryAt) >= start + minimum);
+  assert.ok(Date.parse(waiting.retryAt) <= Date.now() + maximum);
+  return waiting;
+}
+
+test('empty initial review retries twice with persistent pacing, then stops instead of looping', async () => {
+  process.env.CONTENT_REVIEW = 'true';
+  try {
+    for (let round = 0; round < 3; round++) {
+      responses = [{content:candidates()}, {content:rejectedReview()}];
+      const reason = round < 2 ? 'initial_posts_rejected' : 'initial_posts_retry_limit';
+      const delay = [30000,60000,1800000][round];
+      const wait = await seedWait(reason, delay, delay + 1000);
+      assert.equal(requests.length, (round + 1) * 2);
+      const events = (await db.execute("SELECT * FROM content_events WHERE job='seed_recovery'")).rows;
+      assert.equal(events.length, round + 1);
+      // Reopening/reloading cannot consume another attempt or extend the wait.
+      const again = await seedWait(reason, 0, delay + 1000);
+      assert.equal(again.retryAt, wait.retryAt);
+      assert.equal(requests.length, (round + 1) * 2);
+      if (round < 2) await db.execute("UPDATE content_pool_state SET next_fill_at='2000-01-01'");
+    }
+    assert.equal((await db.execute('SELECT COUNT(*) n FROM posts')).rows[0].n, 0);
+    // A manual retry after the cooling period starts a new bounded series.
+    await db.execute("UPDATE content_events SET created_at='2000-01-01' WHERE job='seed_recovery'");
+    await db.execute("UPDATE content_pool_state SET next_fill_at='2000-01-01'");
+    responses = [{content:candidates()}, {content:rejectedReview()}];
+    await seedWait('initial_posts_rejected', 30000, 31000);
+  } finally { process.env.CONTENT_REVIEW = 'false'; }
+});
+
+test('a short retry can recover with approved initial posts and returns to ordinary refill pacing', async () => {
+  process.env.CONTENT_REVIEW = 'true';
+  try {
+    responses = [{content:candidates()}, {content:rejectedReview()}];
+    await seedWait('initial_posts_rejected', 30000, 31000);
+    await db.execute("UPDATE content_pool_state SET next_fill_at='2000-01-01'");
+    responses = [{content:candidates()}, {content:[0,1,2,3].map(index=>({index,accepted:true,reason:'accepted'}))}];
+    assert.equal(await seedEnhanced('owner'), 4);
+    const state = (await db.execute("SELECT * FROM content_pool_state WHERE user_id='owner'")).rows[0];
+    assert.equal(state.defer_reason, '');
+    assert.ok(Date.parse(state.next_fill_at) > Date.now() + 29 * 60000);
+    assert.equal(await seedEnhanced('owner'), 0);
+    assert.equal(requests.length, 4);
+  } finally { process.env.CONTENT_REVIEW = 'false'; }
+});
+
+test('invalid-only initial generation also gets bounded recovery without weakening quality checks', async () => {
+  responses = Array.from({length:2},()=>({content:[{username:'unknown',content:texts[0]}]}));
+  await seedWait('initial_posts_rejected', 30000, 31000);
+  assert.equal(requests.length, 2);
+  assert.equal((await db.execute('SELECT COUNT(*) n FROM posts')).rows[0].n, 0);
+});
+
+test('AI replies alone do not count as independent initial posts', async () => {
+  await db.execute("INSERT INTO posts(id,user_id,author_id,author_type,content) VALUES('parent','owner','owner','user','映画の音楽の話です。')");
+  await db.execute("INSERT INTO posts(id,user_id,author_id,author_type,content,reply_to,ai) VALUES('ai-reply','owner','owner0','ai','映画の音楽にはピアノが合いますね。','parent',1)");
+  assert.equal(await seedEnhanced('owner'), 4);
+  assert.equal(requests.length, 1);
+});
+
+test('recovery history is scoped to the current world and does not inherit another world or user failures', async () => {
+  const now = new Date().toISOString();
+  for (const [user,version] of [['owner',99],['other',1]]) {
+    for(let i=0;i<3;i++) await db.execute({sql:"INSERT INTO content_events(user_id,job,outcome,reason,scores,created_at) VALUES(?,'seed_recovery','empty','initial_posts_rejected',?,?)",args:[user,JSON.stringify({theme_version:version}),now]});
+  }
+  responses = [{content:[]},{content:[]}];
+  await seedWait('initial_posts_rejected', 30000, 31000);
+});
+
+test('a retry that reaches the daily budget retains its reset time rather than scheduling another quality retry', async()=>{
+  process.env.LLM_DAILY_REQUEST_BUDGET='1';
+  process.env.CONTENT_REFILL_ATTEMPTS='1';
+  try {
+    responses=[{content:[]}];
+    await seedWait('initial_posts_rejected',30000,31000);
+    await db.execute("UPDATE content_pool_state SET next_fill_at='2000-01-01'");
+    let reset;
+    await assert.rejects(seedEnhanced('owner'),e=>{reset=e.retryAt;return e.message==='daily_budget'});
+    assert.equal(requests.length,1);
+    const state=(await db.execute("SELECT * FROM content_pool_state WHERE user_id='owner'")).rows[0];
+    assert.equal(state.defer_reason,'daily_budget');assert.equal(state.next_fill_at,reset);
+    await assert.rejects(seedEnhanced('owner'),e=>e.message==='daily_budget'&&e.retryAt===reset);
+    assert.equal(requests.length,1);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM content_events WHERE job='seed_recovery'")).rows[0].n,1);
+  } finally {delete process.env.CONTENT_REFILL_ATTEMPTS;}
 });

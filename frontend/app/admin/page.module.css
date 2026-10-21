@@ -1,0 +1,28 @@
+.page { min-height: 100svh; background: #07040e; color: #f4edfc; color-scheme: dark; }
+.header { display: flex; justify-content: space-between; align-items: center; padding: 22px 32px; border-bottom: 1px solid #382344; }
+.header a { color: #f4edfc; font-weight: 800; text-decoration: none; }
+.header span, .heading > span { color: #c69aef; font-size: 12px; }
+.main { max-width: 840px; margin: auto; padding: 48px 24px; }
+.heading { margin-bottom: 24px; }
+.heading > span { letter-spacing: .14em; }
+.heading h1 { font-size: 26px; margin: 10px 0; }
+.heading p, .panel p, .updated { color: #b7a4c9; font-size: 13px; line-height: 1.7; }
+.panel { background: #160d23; border: 1px solid #412955; border-radius: 16px; padding: 24px; margin-bottom: 18px; }
+form.panel { max-width: 430px; display: grid; gap: 12px; }
+.panel label { font-size: 13px; }
+.panel input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid #68467e; border-radius: 8px; background: #090510; color: white; font: inherit; margin-bottom: 8px; }
+.page button { padding: 11px 18px; border: 1px solid #9b65c4; border-radius: 99px; background: #792cc0; color: white; font: inherit; font-size: 13px; cursor: pointer; }
+.page button:disabled { opacity: .5; cursor: wait; }
+.page a { color: #d7b2f5; font-size: 13px; }
+.page :focus-visible { outline: 2px solid #d7b2f5; outline-offset: 4px; }
+.actions { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+.actions button + button { background: transparent; }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.metrics .panel { padding: 18px; }
+.metrics span { display: block; font-size: 12px; color: #baa5cf; }
+.metrics strong { display: block; font-size: 28px; margin-top: 12px; }
+.panel h2 { margin: 0 0 18px; font-size: 16px; }
+.row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid #382344; font-size: 13px; }
+.row:last-child { border-bottom: none; }
+.error { color: #ffb8c2; border: 1px solid #78404e; padding: 14px; border-radius: 10px; }
+@media(max-width: 600px) { .main { padding: 32px 18px; } .header { padding: 20px; } .metrics { grid-template-columns: repeat(2, 1fr); } }

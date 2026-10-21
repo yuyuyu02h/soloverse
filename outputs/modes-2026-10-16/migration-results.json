@@ -1,0 +1,90 @@
+{
+  "original_database_untouched": true,
+  "all_original_fields_preserved": true,
+  "tables": {
+    "users": {
+      "count": 5,
+      "original_fields_preserved": true
+    },
+    "world_settings": {
+      "count": 2,
+      "original_fields_preserved": true
+    },
+    "ai_characters": {
+      "count": 20,
+      "original_fields_preserved": true
+    },
+    "posts": {
+      "count": 214,
+      "original_fields_preserved": true
+    },
+    "likes": {
+      "count": 2,
+      "original_fields_preserved": true
+    },
+    "reaction_queue": {
+      "count": 0,
+      "original_fields_preserved": true
+    },
+    "notifications": {
+      "count": 4,
+      "original_fields_preserved": true
+    },
+    "trends": {
+      "count": 0,
+      "original_fields_preserved": true
+    },
+    "character_growth_log": {
+      "count": 0,
+      "original_fields_preserved": true
+    },
+    "autonomous_log": {
+      "count": 2,
+      "original_fields_preserved": true
+    },
+    "llm_attempts": {
+      "count": 50,
+      "original_fields_preserved": true
+    },
+    "llm_provider_limits": {
+      "count": 4,
+      "original_fields_preserved": true
+    },
+    "content_events": {
+      "count": 832,
+      "original_fields_preserved": true
+    },
+    "resident_profiles": {
+      "count": 20,
+      "original_fields_preserved": true
+    },
+    "resident_memory": {
+      "count": 152,
+      "original_fields_preserved": true
+    },
+    "content_candidates": {
+      "count": 238,
+      "original_fields_preserved": true
+    },
+    "content_pool_state": {
+      "count": 2,
+      "original_fields_preserved": true
+    },
+    "celebrity_scenes": {
+      "count": 14,
+      "original_fields_preserved": true
+    },
+    "celebrity_comments": {
+      "count": 1248,
+      "original_fields_preserved": true
+    },
+    "celebrity_notification_preferences": {
+      "count": 1,
+      "original_fields_preserved": true
+    },
+    "world_theme_state": {
+      "count": 2,
+      "original_fields_preserved": true
+    }
+  }
+}

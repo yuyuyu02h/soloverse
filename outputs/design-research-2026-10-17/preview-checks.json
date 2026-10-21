@@ -1,0 +1,63 @@
+{
+  "errors": [],
+  "layouts": [
+    {
+      "variant": "paper",
+      "width": 320,
+      "scroll": 320
+    },
+    {
+      "variant": "ink",
+      "width": 320,
+      "scroll": 320
+    },
+    {
+      "variant": "paper",
+      "width": 375,
+      "scroll": 375
+    },
+    {
+      "variant": "ink",
+      "width": 375,
+      "scroll": 375
+    },
+    {
+      "variant": "paper",
+      "width": 640,
+      "scroll": 640
+    },
+    {
+      "variant": "ink",
+      "width": 640,
+      "scroll": 640
+    },
+    {
+      "variant": "paper",
+      "width": 736,
+      "scroll": 736
+    },
+    {
+      "variant": "ink",
+      "width": 736,
+      "scroll": 736
+    },
+    {
+      "variant": "paper",
+      "width": 1024,
+      "scroll": 1024
+    },
+    {
+      "variant": "ink",
+      "width": 1024,
+      "scroll": 1024
+    }
+  ],
+  "checks": [
+    "like toggle and count",
+    "inline reply toggle",
+    "local compose",
+    "notification overlay and escape",
+    "variant switch",
+    "horizontal overflow and clipped content"
+  ]
+}

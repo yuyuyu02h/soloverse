@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { Avatar, timeAgo } from './utils';
 import { ContentStatus } from './ContentStatus';
+import { MODE_OPTIONS, CONTEXT_FIELDS, CONTEXT_LABELS, type ExperienceMode } from '../lib/worldModes';
 
 interface Trend {
   id: string;
@@ -37,17 +38,38 @@ export function TrendPanel({ onClose, onTrendClick, onWorldRebuilt }: {
   const [error, setError] = useState('');
   const [tab, setTab] = useState<'trends' | 'followers'>('trends');
   const [rebuilding, setRebuilding] = useState(false);
+  const [theme, setTheme] = useState('');
+  const [themeDraft, setThemeDraft] = useState('');
+  const [mode, setMode] = useState<ExperienceMode>('hobby');
+  const [modeDraft, setModeDraft] = useState<ExperienceMode>('hobby');
+  const [changingTheme, setChangingTheme] = useState(false);
 
   useEffect(() => {
     Promise.all([
       api.get('/api/timeline/trends'),
       api.get('/api/timeline/characters'),
-    ]).then(([td, cd]) => {
+      api.get('/api/onboarding/world'),
+    ]).then(([td, cd, world]) => {
       setTrends(td.trends);
       setChars(cd.characters);
+      setTheme(world.settings?.interests || '');
+      setThemeDraft(world.settings?.interests || '');
+      setMode(world.settings?.mode || 'hobby');
+      setModeDraft(world.settings?.mode || 'hobby');
     }).catch(e => setError(e instanceof Error ? e.message : '読み込みに失敗しました'))
       .finally(() => setLoading(false));
   }, []);
+
+  const changeTheme = async () => {
+    if (changingTheme || !themeDraft.trim()) return;
+    setChangingTheme(true); setError('');
+    try {
+      await api.post('/api/onboarding/theme', { mode: modeDraft, [CONTEXT_FIELDS[modeDraft]]: themeDraft.trim() });
+      await onWorldRebuilt();
+      onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : 'テーマを変更できませんでした'); }
+    finally { setChangingTheme(false); }
+  };
 
   const rebuildWorld = async () => {
     if (rebuilding) return;
@@ -96,6 +118,21 @@ export function TrendPanel({ onClose, onTrendClick, onWorldRebuilt }: {
         </div>
 
         <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          {!loading && <div style={{ padding: 16, borderBottom: '1px solid #2f3336' }}>
+            <label htmlFor="world-mode" style={{ display: 'block', color: '#e7e9ea', fontWeight: 600, marginBottom: 8 }}>体験モード</label>
+            <select id="world-mode" value={modeDraft} onChange={e => { const value = e.target.value as ExperienceMode; setModeDraft(value); setThemeDraft(value === mode ? theme : ''); }} disabled={changingTheme || rebuilding}
+              style={{ width: '100%', background: '#101114', color: '#e7e9ea', border: '1px solid #536471', borderRadius: 8, padding: 10, marginBottom: 16, font: 'inherit' }}>
+              {MODE_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <label htmlFor="world-theme" style={{ display: 'block', color: '#e7e9ea', fontWeight: 600, marginBottom: 8 }}>{CONTEXT_LABELS[modeDraft]}</label>
+            <textarea id="world-theme" value={themeDraft} onChange={e => setThemeDraft(e.target.value)} maxLength={300} rows={2} disabled={changingTheme || rebuilding}
+              style={{ width: '100%', boxSizing: 'border-box', background: '#101114', color: '#e7e9ea', border: '1px solid #536471', borderRadius: 8, padding: 10, font: 'inherit', resize: 'vertical' }} />
+            <p style={{ color: '#8b8d93', fontSize: 12, lineHeight: 1.6 }}>これまでの投稿は保存されます。選んだ体験に合う住人を準備します。</p>
+            <button onClick={changeTheme} disabled={changingTheme || rebuilding || !themeDraft.trim() || (modeDraft === mode && themeDraft.trim() === theme)}
+              style={{ padding: '8px 16px', borderRadius: 18, border: 0, color: '#fff', background: '#5b46c8', opacity: changingTheme || !themeDraft.trim() || (modeDraft === mode && themeDraft.trim() === theme) ? 0.5 : 1, cursor: 'pointer' }}>
+              {changingTheme ? '新しい世界を準備しています…' : '体験を変更'}
+            </button>
+          </div>}
           {loading && <div style={{ padding: 24, color: '#71767b', textAlign: 'center', fontSize: 14 }}>読み込み中…</div>}
           {error && <p role="alert" style={{ padding: 16, color: '#ef9999' }}>{error}</p>}
 
@@ -173,7 +210,7 @@ export function TrendPanel({ onClose, onTrendClick, onWorldRebuilt }: {
                 <div style={{ padding: 16, borderTop: '1px solid #2f3336' }}>
                   <button
                     onClick={rebuildWorld}
-                    disabled={rebuilding}
+                    disabled={rebuilding || changingTheme}
                     style={{
                       width: '100%', padding: '10px 14px', borderRadius: 18,
                       border: '1px solid #536471', color: '#e7e9ea', background: 'transparent',

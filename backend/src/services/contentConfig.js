@@ -13,6 +13,7 @@ function config() {
     horizonHours: integer('CONTENT_POOL_HOURS', 12, 6, 24),
     refillAttempts: integer('CONTENT_REFILL_ATTEMPTS', 2, 1, 3),
     templates: process.env.CONTENT_TEMPLATES !== 'false',
+    review: process.env.CONTENT_REVIEW !== 'false',
   };
 }
 module.exports = { enabled, config };

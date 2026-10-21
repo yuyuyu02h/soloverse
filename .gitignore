@@ -7,6 +7,7 @@
 .env
 .env.local
 backend/.env
+ai-project-template/
 
 # 依存関係
 node_modules/
@@ -24,3 +25,16 @@ npm-debug.log*
 
 # Private recovery snapshots (contain credentials and personal data)
 .recovery/
+
+# Local credentials (never publish or commit)
+.private/
+# Cloudflare local state and static build output
+.wrangler/
+frontend/out/
+
+# Wrangler local secrets
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+cloudflare/dist/
+cloudflare/legacy-redirect/out/

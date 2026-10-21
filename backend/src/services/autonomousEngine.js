@@ -1,10 +1,14 @@
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/schema');
 const { callLLM, buildWorldSystemPrompt, safeParseJSON } = require('./llm');
+const { generateAICharacters } = require('./worldGenerator');
 const { serializeWorldTask } = require('./worldTasks');
 const { enabled } = require('./contentConfig');
 const { generateReply } = require('./contentPipeline');
 const { recordContent } = require('./llmRuntime');
+const { themeState, currentVersion } = require('./worldTheme');
+const { matchesTheme } = require('./topicPolicy');
+const { activeGenerationSQL, isGenerationActive } = require('./generationActivity');
 
 function parseDBTimestamp(value) {
   if (!value) return 0;
@@ -31,14 +35,18 @@ function getTimeSlot() {
 // キャラ同士のリプライチェーン・ユーザーへのメンションを含む
 // ─────────────────────────────────────────────────────────
 async function runAutonomousTimeline(userId) {
+  if (!await isGenerationActive(userId)) return 0;
+  await themeState(userId);
   if (require('./contentConfig').enabled()) {
     const pipeline = require('./contentPipeline');
+    // Cron publishes/reviews in its own invocation; never spend both budgets here.
+    if (process.env.SOLOVERSE_RUNTIME === 'cloudflare') return pipeline.fillPool(userId);
     await pipeline.publishPool(userId);
     await pipeline.fillPool(userId);
     return pipeline.publishPool(userId);
   }
   const [charsResult, settingsResult, userResult] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ?', args: [userId] }),
+    db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')}`, args: [userId] }),
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
     db.execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] }),
   ]);
@@ -58,7 +66,7 @@ async function runAutonomousTimeline(userId) {
           FROM posts p
           LEFT JOIN ai_characters ac ON p.author_type = 'ai' AND p.author_id = ac.id
           LEFT JOIN users u ON p.author_type = 'user' AND p.author_id = u.id
-          WHERE p.user_id = ? AND p.reply_to IS NULL
+          WHERE p.user_id = ? AND ${currentVersion('p')} AND p.reply_to IS NULL
           ORDER BY datetime(p.created_at) DESC LIMIT 8`,
     args: [userId],
   });
@@ -110,7 +118,7 @@ JSON配列のみ出力（説明・\`\`\`不要）:
 [
   {"username": "username（@なし）", "content": "投稿内容", "reply_to_id": null, "reply_to_index": null}
 ]`,
-    1800
+    1800, { userId, job: 'autonomous', priority: 'background' }
   );
 
   const posts = safeParseJSON(raw);
@@ -144,13 +152,13 @@ JSON配列のみ出力（説明・\`\`\`不要）:
 
     const postId = uuidv4();
     await db.execute({
-      sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, created_at, ai)
-            VALUES (?, ?, ?, 'ai', ?, ?, ?, 1)`,
+      sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, created_at, ai,theme_version)
+            VALUES (?, ?, ?, 'ai', ?, ?, ?, 1,?)`,
       args: [
         postId, userId, char.id,
         content,
         replyToId,
-        new Date().toISOString()
+        new Date().toISOString(),(await themeState(userId)).theme_version
       ],
     });
     count++;
@@ -185,24 +193,25 @@ JSON配列のみ出力（説明・\`\`\`不要）:
 // ② 投稿からトレンド集計（LLM呼び出しなし）
 // ─────────────────────────────────────────────────────────
 async function runTrendGeneration(userId) {
+  const settings = await themeState(userId);
   // 人気を架空の投稿で作らず、この世界の直近7日間の実投稿から集計する。
   const recent = await db.execute({
-    sql: `SELECT content FROM posts WHERE user_id = ?
+    sql: `SELECT content FROM posts p WHERE user_id = ? AND ${currentVersion('p')}
           AND datetime(created_at) >= datetime('now', '-7 days')
           ORDER BY datetime(created_at) DESC LIMIT 500`,
     args: [userId],
   });
   const counts = new Map();
   for (const post of recent.rows) {
-    const tags = new Set([...post.content.matchAll(/[#＃]([\p{L}\p{N}_]{1,30})/gu)].map(match => match[1]));
+    const tags = new Set([...post.content.matchAll(/(?<![A-Za-z0-9_+#])[#＃]([\p{L}\p{N}_]{1,30})/gu)].map(match => match[1]));
     for (const tag of tags) counts.set(tag, (counts.get(tag) || 0) + 1);
   }
   const trends = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 3);
   const statements = [{ sql: 'DELETE FROM trends WHERE user_id = ?', args: [userId] }];
   for (const [keyword, count] of trends) {
     statements.push({
-      sql: 'INSERT INTO trends (id, user_id, keyword, description, post_count) VALUES (?, ?, ?, ?, ?)',
-      args: [uuidv4(), userId, keyword, '最近7日間・直近500投稿に含まれる話題', count],
+      sql: 'INSERT INTO trends (id, user_id, keyword, description, post_count,theme_version) VALUES (?, ?, ?, ?, ?,?)',
+      args: [uuidv4(), userId, keyword, '最近7日間・直近500投稿に含まれる話題', count,settings?.theme_version || 1],
     });
   }
   statements.push({
@@ -220,18 +229,21 @@ async function runTrendGeneration(userId) {
 // autonomous_log で一元管理
 // ─────────────────────────────────────────────────────────
 async function runCharacterGrowth(userId) {
+  if (!await isGenerationActive(userId)) return 0;
+  const currentSettings = await themeState(userId);
   const [charsResult, settingsResult, postsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ?', args: [userId] }),
+    db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')}`, args: [userId] }),
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
     db.execute({
-      sql: `SELECT content FROM posts WHERE user_id = ? AND author_type = 'user' ORDER BY datetime(created_at) DESC LIMIT 10`,
+      sql: `SELECT content FROM posts p WHERE user_id = ? AND ${currentVersion('p')} AND author_type = 'user' ORDER BY datetime(created_at) DESC LIMIT 10`,
       args: [userId],
     }),
   ]);
 
   const chars = charsResult.rows;
   const settings = settingsResult.rows[0];
-  if (!settings || chars.length >= 20) return;
+  // 有名人モードでは大衆を個別キャラクターとして増殖させない。
+  if (!settings || settings.position === 'admired' || chars.length >= 20) return;
 
   // autonomous_log で6時間チェック（character_growth_log ではなく統一管理）
   const log = await db.execute({
@@ -249,56 +261,39 @@ async function runCharacterGrowth(userId) {
     return 0;
   }
 
-  const userPostContext = postsResult.rows.length > 0
-    ? postsResult.rows.map(p => p.content).join(' / ')
-    : settings.interests;
-
-  const existingUsernames = chars.map(c => c.username).join(', ');
   const newCount = Math.min(20 - chars.length, Math.random() < 0.5 ? 1 : 2);
-
-  const system = buildWorldSystemPrompt(settings, null, [
-    `使用済みユーザー名（絶対に使わない）: ${existingUsernames}`,
-    'ユーザーの最近の投稿に共感・興味を持ったという設定で生成する',
-  ]);
-
-  const raw = await callLLM(
-    system,
-    `新しいフォロワーを${newCount}人生成してください。
-ユーザーの最近の投稿: 「${userPostContext}」
-
-JSON配列のみ出力（説明・\`\`\`不要）:
-[{"name":"表示名","username":"英数字（重複不可）","avatar_seed":"英単語","bio":"30字以内","personality":"一言","interests":"カンマ区切り","reply_style":"具体的な傾向","reaction_frequency":"high/mid/low","delay_profile":"fast/normal/slow"}]`,
-    600, { userId, job: 'growth', priority: 'background' }
-  );
-
-  const newChars = safeParseJSON(raw);
-  if (!newChars || !Array.isArray(newChars)) { console.warn('[Engine] growth JSON failed'); return; }
+  const newChars = await generateAICharacters({
+    ...settings, userId, count: newCount, existingCharacters: chars,
+    recentPosts: postsResult.rows.map(p => p.content), job: 'growth', priority: 'background',
+  });
+  if ((await themeState(userId))?.theme_version !== currentSettings.theme_version) return 0;
 
   let added = 0;
   for (const c of newChars.slice(0, newCount)) {
     if (!c || typeof c !== 'object') continue;
+    if (!matchesTheme([c.interests,c.bio,c.personality].join(' '),settings.interests)) continue;
     const username = String(c.username || `new_user_${Date.now()}_${added}`)
       .replace(/^@/, '')
       .replace(/[^a-zA-Z0-9_]/g, '_')
       .slice(0, 24);
     if (!username) continue;
     const dup = await db.execute({
-      sql: 'SELECT id FROM ai_characters WHERE user_id = ? AND username = ? COLLATE NOCASE',
+      sql: `SELECT id FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')} AND username = ? COLLATE NOCASE`,
       args: [userId, username],
     });
     if (dup.rows.length > 0) continue;
 
     const charId = uuidv4();
     await db.execute({
-      sql: `INSERT INTO ai_characters (id, user_id, name, username, avatar_seed, bio, personality, interests, reply_style, reaction_frequency, delay_profile)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO ai_characters (id, user_id, name, username, avatar_seed, bio, personality, interests, reply_style, reaction_frequency, delay_profile,theme_version,participation_role)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)`,
       args: [charId, userId,
         String(c.name || '新しい住人').slice(0, 40), username,
         String(c.avatar_seed || 'new').slice(0, 40), String(c.bio || '').slice(0, 100),
         String(c.personality || '明るい').slice(0, 100), String(c.interests || settings.interests).slice(0, 300),
         String(c.reply_style || '共感').slice(0, 100),
         ['high', 'mid', 'low'].includes(c.reaction_frequency) ? c.reaction_frequency : 'mid',
-        ['fast', 'normal', 'slow'].includes(c.delay_profile) ? c.delay_profile : 'normal'],
+        ['fast', 'normal', 'slow'].includes(c.delay_profile) ? c.delay_profile : 'normal',currentSettings.theme_version,c.participation_role],
     });
 
     await db.execute({
@@ -309,9 +304,9 @@ JSON配列のみ出力（説明・\`\`\`不要）:
     // 自己紹介投稿 + 既存キャラからの歓迎リプライ
     try {
       const charInfo = { name: c.name, username, personality: c.personality, interests: c.interests, reply_style: c.reply_style };
-      const fullChar = { ...charInfo, id: charId, user_id: userId, bio: c.bio, delay_profile: c.delay_profile };
+      const fullChar = { ...charInfo, id: charId, user_id: userId, bio: c.bio, delay_profile: c.delay_profile, participation_role: c.participation_role };
       const intro = enabled() ? await generateReply(userId, fullChar, settings, String(c.interests || settings.interests), {
-        job: 'introduction', priority: 'background', ambient: true,
+        job: 'introduction', priority: 'background',
         instruction: '初めての自己紹介を具体的な趣味とともに20〜100字で書く。投稿本文のみ',
       }) : (await callLLM(
         buildWorldSystemPrompt(settings, charInfo, ['初めての自己紹介投稿を40字以内で1件書く', '投稿文のみ出力する']),
@@ -321,8 +316,8 @@ JSON配列のみ出力（説明・\`\`\`不要）:
 
       const introId = uuidv4();
       await db.execute({
-        sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, ai) VALUES (?, ?, ?, 'ai', ?, 1)`,
-        args: [introId, userId, charId, intro],
+        sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, ai,theme_version) VALUES (?, ?, ?, 'ai', ?, 1,?)`,
+        args: [introId, userId, charId, intro,currentSettings.theme_version],
       });
       await recordContent(userId, 'introduction', 'published', 'llm');
 
@@ -330,7 +325,7 @@ JSON配列のみ出力（説明・\`\`\`不要）:
         const welcomer = chars[Math.floor(Math.random() * chars.length)];
         const welcomerInfo = { name: welcomer.name, username: welcomer.username, personality: welcomer.personality, interests: welcomer.interests, reply_style: welcomer.reply_style };
         const welcome = enabled() ? await generateReply(userId, welcomer, settings, intro, {
-          job: 'welcome', priority: 'background', ambient: true,
+          job: 'welcome', priority: 'background',
           instruction: '新しい住人の自己紹介に、共通する趣味を具体的に挙げて歓迎する。20〜100字の本文のみ',
         }) : (await callLLM(
           buildWorldSystemPrompt(settings, welcomerInfo, ['歓迎・挨拶の返信を30字以内で書く', '返信文のみ出力する']),
@@ -339,8 +334,8 @@ JSON配列のみ出力（説明・\`\`\`不要）:
         )).trim().slice(0, 140);
 
         await db.execute({
-          sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai) VALUES (?, ?, ?, 'ai', ?, ?, 1)`,
-          args: [uuidv4(), userId, welcomer.id, welcome, introId],
+          sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai,theme_version) VALUES (?, ?, ?, 'ai', ?, ?, 1,?)`,
+          args: [uuidv4(), userId, welcomer.id, welcome, introId,currentSettings.theme_version],
         });
         await recordContent(userId, 'welcome', 'published', 'llm');
       }
@@ -372,6 +367,7 @@ JSON配列のみ出力（説明・\`\`\`不要）:
 // 24時間以上投稿なし → AI が呼びかけ投稿 + absence 通知
 // ─────────────────────────────────────────────────────────
 async function checkAbsenceReactions(userId) {
+  if (!await isGenerationActive(userId)) return;
   const lastPost = await db.execute({
     sql: `SELECT created_at FROM posts
           WHERE user_id = ? AND author_type = 'user'
@@ -398,7 +394,7 @@ async function checkAbsenceReactions(userId) {
 
   const [settingsResult, charsResult] = await Promise.all([
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ? ORDER BY RANDOM() LIMIT 2', args: [userId] }),
+    db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')} ORDER BY RANDOM() LIMIT 2`, args: [userId] }),
   ]);
 
   const settings = settingsResult.rows[0];
@@ -430,9 +426,9 @@ async function checkAbsenceReactions(userId) {
 
   const postId = uuidv4();
   await db.execute({
-    sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, ai)
-          VALUES (?, ?, ?, 'ai', ?, 1)`,
-    args: [postId, userId, char.id, content],
+    sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, ai,theme_version)
+          VALUES (?, ?, ?, 'ai', ?, 1,?)`,
+    args: [postId, userId, char.id, content,(await themeState(userId)).theme_version],
   });
   await recordContent(userId, 'absence', 'published', 'llm');
 
@@ -448,8 +444,12 @@ async function checkAbsenceReactions(userId) {
 // ─────────────────────────────────────────────────────────
 // バッチ: 全ユーザー処理
 // ─────────────────────────────────────────────────────────
-async function runAllUsers() {
-  const users = await db.execute({ sql: `SELECT id FROM users WHERE onboarding_done = 1` });
+async function runAllUsers(only = null) {
+  const refillOnly = process.env.SOLOVERSE_RUNTIME === 'cloudflare' && only === 'timeline';
+  const users = await db.execute({ sql: `SELECT id FROM users WHERE onboarding_done = 1 AND ${activeGenerationSQL('users.id')}
+    ${refillOnly ? `AND NOT EXISTS (SELECT 1 FROM content_pool_state s WHERE s.user_id=users.id AND s.next_fill_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+      AND (SELECT COUNT(*) FROM content_candidates c WHERE c.user_id=users.id AND state='pending' AND ${currentVersion('c')})<=2
+      ORDER BY COALESCE((SELECT last_autonomous_at FROM autonomous_log WHERE user_id=users.id),'') LIMIT 1` : ''}` });
 
   for (const user of users.rows) {
     await serializeWorldTask(user.id, async () => { try {
@@ -463,12 +463,13 @@ async function runAllUsers() {
       const configuredMinutes = Number(process.env.AUTONOMOUS_INTERVAL_MINUTES);
       const intervalMinutes = Number.isFinite(configuredMinutes) && configuredMinutes >= 5 ? configuredMinutes : 15;
       const jobs = [
-        ...(now - lastAuto > intervalMinutes * 60000 ? [() => runAutonomousTimeline(user.id)] : []),
-        ...(now - lastTrend > 5 * 60000 ? [() => runTrendGeneration(user.id)] : []),
-        () => runCharacterGrowth(user.id),
-        () => checkAbsenceReactions(user.id),
+        ...((!only || only === 'timeline') && now - lastAuto > intervalMinutes * 60000 ? [() => runAutonomousTimeline(user.id)] : []),
+        ...((!only || only === 'trends') && now - lastTrend > 5 * 60000 ? [() => runTrendGeneration(user.id)] : []),
+        ...(!only || only === 'growth' ? [() => runCharacterGrowth(user.id)] : []),
+        ...(!only || only === 'absence' ? [() => checkAbsenceReactions(user.id)] : []),
       ];
       for (const job of jobs) {
+        if (!await isGenerationActive(user.id)) break;
         try { await job(); } catch (e) { console.warn(`[Engine] Job failed for user ${user.id}:`, e.message); }
       }
     } catch (e) {

@@ -1,0 +1,9 @@
+.banner { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 12px 24px; background: #211030; color: #eee0fb; border-bottom: 1px solid #633e7a; font-size: 12px; flex-wrap: wrap; }
+.banner > div { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+.banner strong { color: #e2baff; font-weight: 700; }
+.banner span { color: #c9b7d8; }
+.banner nav { display: flex; gap: 18px; flex-wrap: wrap; }
+.banner a { color: #ead4ff; text-decoration: underline; text-underline-offset: 3px; }
+.banner a:hover { color: #fff; }
+.banner a:focus-visible { outline: 2px solid #ddb0ff; outline-offset: 4px; }
+@media(max-width: 600px) { .banner { padding: 12px 18px; } }

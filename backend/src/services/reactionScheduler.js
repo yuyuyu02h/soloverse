@@ -3,6 +3,8 @@ const { db } = require('../db/schema');
 const { callLLM, buildWorldSystemPrompt, safeParseJSON } = require('./llm');
 const { serializeWorldTask } = require('./worldTasks');
 const { enabled } = require('./contentConfig');
+const { themeState, currentVersion } = require('./worldTheme');
+const { activeGenerationSQL, isGenerationActive } = require('./generationActivity');
 
 function analyzeEngagementIntent(value) {
   const content = String(value || '').normalize('NFKC').trim();
@@ -25,17 +27,28 @@ function directReplyDelayMinutes() {
   return Math.floor(Math.random() * directReplyMaximumMinutes()) + 1;
 }
 
-async function queueReaction({ userId, characterId, postId, type, delayMinutes }) {
-  await db.execute({
-    sql: `INSERT INTO reaction_queue (id, user_id, character_id, post_id, reaction_type, scheduled_at) VALUES (?, ?, ?, ?, ?, ?)`,
-    args: [uuidv4(), userId, characterId, postId, type, new Date(Date.now() + delayMinutes * 60000).toISOString()],
-  });
+function mentionedResidents(content, residents) {
+  const handles = [...String(content || '').normalize('NFKC').matchAll(/(?:^|[^A-Za-z0-9_@])@([A-Za-z0-9_]{1,24})(?![A-Za-z0-9_])/g)]
+    .map(match => match[1].toLowerCase());
+  return [...new Set(handles)].map(handle => residents.find(char => char.username.toLowerCase() === handle)).filter(Boolean);
+}
+
+async function queueReaction({ userId, characterId, postId, type, delayMinutes, replyPriority = 0 }) {
+  const settings = await themeState(userId);
+  await db.execute(reactionStatement({ userId, characterId, postId, type, delayMinutes, replyPriority }, settings));
+}
+
+function reactionStatement({ userId, characterId, postId, type, delayMinutes, replyPriority = 0 }, settings) {
+  return {
+    sql: `INSERT INTO reaction_queue (id, user_id, character_id, post_id, reaction_type, scheduled_at,theme_version,reply_priority) VALUES (?, ?, ?, ?, ?, ?,?,?)`,
+    args: [uuidv4(), userId, characterId, postId, type, new Date(Date.now() + delayMinutes * 60000).toISOString(),settings?.theme_version || 1,replyPriority],
+  };
 }
 
 // 通常投稿へのリアクションをスケジュール
 async function scheduleReactions(userId, postId, postContent) {
   const [charsResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ? ORDER BY RANDOM()', args: [userId] }),
+    db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')} ORDER BY RANDOM()`, args: [userId] }),
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
   ]);
 
@@ -46,22 +59,26 @@ async function scheduleReactions(userId, postId, postContent) {
     small: { likeCount: 1,  replyProb: 0.30 },
   };
   const { likeCount, replyProb } = config[followerScale] || config.mid;
-  const likers = charsResult.rows.slice(0, Math.min(likeCount, charsResult.rows.length));
+  const mentioned = mentionedResidents(postContent, charsResult.rows);
+  const mentionedIds = new Set(mentioned.map(char => char.id));
+  const likers = settingsResult.rows[0]?.position === 'admired' ? mentioned : [...mentioned, ...charsResult.rows.filter(char => !mentionedIds.has(char.id))]
+    .slice(0, Math.min(Math.max(likeCount, mentioned.length), charsResult.rows.length));
   const intent = analyzeEngagementIntent(postContent);
   let replyCount = 0;
 
   for (const [index, char] of likers.entries()) {
     const delayMinutes = calcDelay(char.delay_profile);
 
-    await queueReaction({ userId, characterId: char.id, postId, type: 'like', delayMinutes });
+    if (settingsResult.rows[0]?.position !== 'admired') await queueReaction({ userId, characterId: char.id, postId, type: 'like', delayMinutes });
 
     // 小規模設定でも、質問・呼びかけを「いいねだけ」で終わらせない。
-    const directReply = intent.wantsReply && index === 0;
+    const directReply = mentionedIds.has(char.id) || (!mentioned.length && intent.wantsReply && index === 0);
     const willReply = directReply || char.reaction_frequency === 'high' || Math.random() < replyProb;
     if (willReply) {
       await queueReaction({
         userId, characterId: char.id, postId, type: 'reply',
-        delayMinutes: directReply ? directReplyDelayMinutes() : delayMinutes + Math.floor(Math.random() * 3) + 1,
+        delayMinutes: mentionedIds.has(char.id) ? 1 : directReply ? directReplyDelayMinutes() : delayMinutes + Math.floor(Math.random() * 3) + 1,
+        replyPriority: mentionedIds.has(char.id) ? 2 : directReply ? 1 : 0,
       });
       replyCount++;
     }
@@ -70,8 +87,8 @@ async function scheduleReactions(userId, postId, postContent) {
   return {
     likeCount: likers.length,
     replyCount,
-    directReply: intent.wantsReply && replyCount > 0,
-    replyWithinMinutes: intent.wantsReply && replyCount > 0
+    directReply: (intent.wantsReply || mentioned.length > 0) && replyCount > 0,
+    replyWithinMinutes: (intent.wantsReply || mentioned.length > 0) && replyCount > 0
       ? directReplyMaximumMinutes()
       : null,
   };
@@ -79,24 +96,31 @@ async function scheduleReactions(userId, postId, postContent) {
 
 // リプライ投稿へのAI反応をスケジュール（確率低め・1〜2人のみ）
 async function scheduleReplyReactions(userId, replyPostId, replyContent, parentPostId) {
-  const [charsResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ? ORDER BY RANDOM() LIMIT 3', args: [userId] }),
-    db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
-  ]);
+  const prepared = await prepareReplyReactions(userId, replyPostId, replyContent, parentPostId);
+  if (prepared.statements.length) await db.batch(prepared.statements, 'write');
+  return prepared.scheduled;
+}
 
-  if (!settingsResult.rows[0] || !charsResult.rows.length) return;
-
-  // リプライへの反応は1〜2人、かつ40%の確率でのみ実施
-  for (const char of charsResult.rows.slice(0, 2)) {
-    if (Math.random() > 0.4) continue;
-
-    const delayMinutes = calcDelay(char.delay_profile) + Math.floor(Math.random() * 10) + 5;
-    await db.execute({
-      sql: `INSERT INTO reaction_queue (id, user_id, character_id, post_id, reaction_type, scheduled_at) VALUES (?, ?, ?, ?, 'reply', ?)`,
-      args: [uuidv4(), userId, char.id, replyPostId,
-        new Date(Date.now() + delayMinutes * 60000).toISOString()],
-    });
+// Prepare without writing so a reply and all its reservations can commit together.
+async function prepareReplyReactions(userId, replyPostId, replyContent, parentPostId) {
+  const settings = await themeState(userId);
+  if (!settings) return { scheduled: null, statements: [] };
+  const parent = (await db.execute({ sql: 'SELECT author_id,author_type FROM posts WHERE id=? AND user_id=?', args: [parentPostId,userId] })).rows[0];
+  const residents = (await db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id=? AND ${currentVersion('c')} ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END,RANDOM()`, args: [userId,parent?.author_type === 'ai' ? parent.author_id : ''] })).rows;
+  const mentioned = mentionedResidents(replyContent, residents);
+  const mentionedIds = new Set(mentioned.map(char => char.id));
+  const chars = [...mentioned, ...residents.filter(char => !mentionedIds.has(char.id))].slice(0, Math.max(2, mentioned.length));
+  const direct = mentioned.length > 0 || analyzeEngagementIntent(replyContent).wantsReply || parent?.author_type === 'ai';
+  let count = 0;
+  const statements = [];
+  for (const [index,char] of chars.entries()) {
+    const priority = mentionedIds.has(char.id) || (!mentioned.length && direct && index === 0);
+    if (!priority && Math.random() > 0.4) continue;
+    statements.push(reactionStatement({ userId,characterId:char.id,postId:replyPostId,type:'reply',delayMinutes:mentionedIds.has(char.id) ? 1 : priority ? directReplyDelayMinutes() : calcDelay(char.delay_profile)+5,replyPriority:mentionedIds.has(char.id) ? 2 : priority ? 1 : 0 }, settings));
+    count++;
+    if (settings.position === 'admired' && count >= Math.max(1, mentioned.length)) break;
   }
+  return { statements, scheduled: { replyCount:count,directReply:direct && count>0,replyWithinMinutes:direct && count>0 ? directReplyMaximumMinutes() : null } };
 }
 
 function calcDelay(delayProfile) {
@@ -112,8 +136,11 @@ const MAX_ATTEMPTS = 3;
 async function backfillDirectReplies() {
   const candidates = await db.execute({
     sql: `SELECT p.id, p.user_id, p.content
-          FROM posts p
-          WHERE p.author_type = 'user' AND p.reply_to IS NULL
+          FROM posts p JOIN world_settings w ON w.user_id=p.user_id
+          WHERE p.author_type = 'user' AND p.reply_to IS NULL AND p.deleted_at IS NULL
+            AND w.position != 'admired'
+            AND ${activeGenerationSQL('p.user_id')}
+            AND ${currentVersion('p')}
             AND datetime(p.created_at) <= datetime('now', '-2 minutes')
             AND datetime(p.created_at) >= datetime('now', '-24 hours')
             AND NOT EXISTS (
@@ -131,7 +158,7 @@ async function backfillDirectReplies() {
   for (const post of candidates.rows) {
     if (!analyzeEngagementIntent(post.content).wantsReply) continue;
     const character = await db.execute({
-      sql: 'SELECT id FROM ai_characters WHERE user_id = ? ORDER BY RANDOM() LIMIT 1',
+      sql: `SELECT id FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')} ORDER BY RANDOM() LIMIT 1`,
       args: [post.user_id],
     });
     if (!character.rows[0]) continue;
@@ -140,7 +167,7 @@ async function backfillDirectReplies() {
       characterId: character.rows[0].id,
       postId: post.id,
       type: 'reply',
-      delayMinutes: directReplyDelayMinutes(),
+      delayMinutes: directReplyDelayMinutes(), replyPriority: 1,
     });
     queued++;
   }
@@ -149,21 +176,31 @@ async function backfillDirectReplies() {
 }
 
 async function processReactionQueue() {
+  const worlds = (await db.execute(`SELECT DISTINCT user_id FROM reaction_queue rq WHERE done=0 AND ${activeGenerationSQL('rq.user_id')}`)).rows;
+  for (const row of worlds) await themeState(row.user_id);
+  // 有名人モードは観客シーンが反応を担当する。明示的な@指定以外の通常キューは処理しない。
+  await db.execute(`UPDATE reaction_queue AS rq SET done=1 WHERE done=0 AND (
+    NOT (${currentVersion('rq')}) OR (reply_priority<2 AND user_id IN (SELECT user_id FROM world_settings WHERE position='admired')
+    AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.id=rq.post_id AND p.reply_to IS NOT NULL)))`);
   await backfillDirectReplies();
   const pending = await db.execute({
     sql: `SELECT rq.*, ac.name, ac.username, ac.personality, ac.reply_style, ac.interests
           FROM reaction_queue rq JOIN ai_characters ac ON rq.character_id = ac.id
           WHERE rq.done = 0 AND datetime(rq.scheduled_at) <= datetime('now')
-          ORDER BY datetime(rq.scheduled_at) ASC LIMIT 20`,
+            AND ${activeGenerationSQL('rq.user_id')}
+            AND ${currentVersion('rq')} AND ${currentVersion('ac')}
+          ORDER BY rq.reply_priority DESC,datetime(rq.scheduled_at) ASC LIMIT 20`,
   });
 
-  for (const item of pending.rows) {
+  for (const item of pending.rows.slice(0, process.env.SOLOVERSE_RUNTIME === 'cloudflare' ? 1 : undefined)) {
+    if (!await isGenerationActive(item.user_id)) continue;
     try {
       if (item.reaction_type === 'like')  await processLike(item);
       if (item.reaction_type === 'reply') await serializeWorldTask(item.user_id, () => processReply(item));
       await db.execute({ sql: 'UPDATE reaction_queue SET done = 1 WHERE id = ?', args: [item.id] });
     } catch (e) {
       if (e.code === 'LLM_DEFERRED') {
+        if (e.message === 'user_inactive') continue; // Pause without consuming retries or changing the reservation.
         await db.execute({ sql: "UPDATE reaction_queue SET scheduled_at=datetime('now','+5 minutes') WHERE id=?", args: [item.id] });
         await require('./llmRuntime').recordContent(item.user_id, 'reply', 'deferred', e.message);
         continue; // Waiting for quota does not consume a generation retry.
@@ -212,14 +249,15 @@ async function processReply(item) {
     if (!current || current.done) return;
   }
   const [postResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT content, reply_to FROM posts WHERE id = ? AND user_id=?', args: [item.post_id, item.user_id] }),
-    db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [item.user_id] }),
+    db.execute({ sql: 'SELECT content, reply_to,theme_version FROM posts WHERE id = ? AND user_id=? AND deleted_at IS NULL', args: [item.post_id, item.user_id] }),
+    themeState(item.user_id),
   ]);
   if (!postResult.rows[0]) return;
 
   const post = postResult.rows[0];
-  const settings = settingsResult.rows[0];
+  const settings = settingsResult;
   if (!settings) return;
+  if (post.theme_version !== settings.theme_version || item.theme_version !== settings.theme_version) return;
   const charInfo = {
     name: item.name, username: item.username,
     personality: item.personality, interests: item.interests,
@@ -242,6 +280,12 @@ async function processReply(item) {
       replyTarget = `親投稿: ${parentPost.rows[0].content}\n返信対象: ${post.content}`;
       promptText = `スレッドの流れ:「${parentPost.rows[0].content}」\n\nこれへの返信:「${post.content}」\n\nこの返信に対してコメントしてください。`;
     }
+    const ancestors = (await db.execute({ sql: `WITH RECURSIVE chain(id,content,reply_to,depth) AS (
+      SELECT id,content,reply_to,0 FROM posts WHERE id=? AND user_id=? AND theme_version=?
+      UNION ALL SELECT p.id,p.content,p.reply_to,chain.depth+1 FROM posts p JOIN chain ON p.id=chain.reply_to
+      WHERE p.user_id=? AND p.theme_version=? AND chain.depth<5)
+      SELECT content,depth FROM chain ORDER BY depth DESC`, args: [item.post_id,item.user_id,settings.theme_version,item.user_id,settings.theme_version] })).rows;
+    replyTarget = `会話（古い順）:\n${ancestors.map(p => p.content).join('\n')}\n今答える投稿: ${post.content}`;
   }
 
   const history = await db.execute({
@@ -252,14 +296,14 @@ async function processReply(item) {
   const char = enabled() ? (await db.execute({ sql: 'SELECT * FROM ai_characters WHERE id=? AND user_id=?', args: [item.character_id, item.user_id] })).rows[0] : null;
   if (enabled() && !char) return;
   const replyContent = enabled()
-    ? await require('./contentPipeline').generateReply(item.user_id, char, settings, replyTarget)
-    : (await callLLM(system, promptText, 350)).trim().slice(0, 140);
+    ? await require('./contentPipeline').generateReply(item.user_id, char, settings, replyTarget, { question: post.content })
+    : (await callLLM(system, promptText, 350, { userId: item.user_id, job: 'reply' })).trim().slice(0, 140);
   if (!replyContent) throw new Error('空の返信が返されました');
 
   const replyId = enabled() ? `reaction-${item.id}` : uuidv4();
   if (enabled()) {
     await db.batch([
-      { sql: `INSERT OR IGNORE INTO posts(id,user_id,author_id,author_type,content,reply_to,ai) VALUES(?,?,?,'ai',?,?,1)`, args: [replyId,item.user_id,item.character_id,replyContent,item.post_id] },
+      { sql: `INSERT OR IGNORE INTO posts(id,user_id,author_id,author_type,content,reply_to,ai,theme_version) VALUES(?,?,?,'ai',?,?,1,?)`, args: [replyId,item.user_id,item.character_id,replyContent,item.post_id,item.theme_version] },
       { sql: `INSERT OR IGNORE INTO notifications(id,user_id,type,character_id,post_id) VALUES(?,?,'reply',?,?)`, args: [replyId,item.user_id,item.character_id,replyId] },
       { sql: 'UPDATE reaction_queue SET done=1 WHERE id=? AND user_id=?', args: [item.id,item.user_id] },
     ], 'write');
@@ -267,8 +311,8 @@ async function processReply(item) {
     return;
   }
   await db.execute({
-    sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai) VALUES (?, ?, ?, 'ai', ?, ?, 1)`,
-    args: [replyId, item.user_id, item.character_id, replyContent, item.post_id],
+    sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, reply_to, ai,theme_version) VALUES (?, ?, ?, 'ai', ?, ?, 1,?)`,
+    args: [replyId, item.user_id, item.character_id, replyContent, item.post_id,item.theme_version],
   });
   await db.execute({
     sql: `INSERT INTO notifications (id, user_id, type, character_id, post_id) VALUES (?, ?, 'reply', ?, ?)`,
@@ -277,12 +321,13 @@ async function processReply(item) {
 }
 
 async function seedTimeline(userId) {
+  await themeState(userId);
   const existing = await db.execute({
-    sql: "SELECT id FROM posts WHERE user_id = ? AND author_type = 'ai' LIMIT 1", args: [userId],
+    sql: `SELECT id FROM posts p WHERE user_id = ? AND ${currentVersion('p')} AND author_type = 'ai' LIMIT 1`, args: [userId],
   });
   if (existing.rows.length) return 0;
   const [charsResult, settingsResult] = await Promise.all([
-    db.execute({ sql: 'SELECT * FROM ai_characters WHERE user_id = ?', args: [userId] }),
+    db.execute({ sql: `SELECT * FROM ai_characters c WHERE user_id = ? AND ${currentVersion('c')}`, args: [userId] }),
     db.execute({ sql: 'SELECT * FROM world_settings WHERE user_id = ?', args: [userId] }),
   ]);
   const chars = charsResult.rows;
@@ -308,7 +353,7 @@ ${chars.slice(0, 8).map(c => `- ${c.name}(@${c.username}): ${c.personality} / �
 良い例:「砂漠の惑星の夕焼けシーン、色づかいが本当に好き」
 JSON配列のみ出力（説明・\`\`\`不要）:
 [{"username": "username（@なし）", "content": "投稿内容（50字以内）"}]`,
-    1000
+    1000, { userId, job: 'seed', priority: 'interactive' }
   );
 
   const posts = safeParseJSON(raw);
@@ -325,8 +370,8 @@ JSON配列のみ出力（説明・\`\`\`不要）:
     seen.add(char.id);
     const hoursAgo = Math.floor(Math.random() * 72) + 1;
     statements.push({
-      sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, created_at, ai) VALUES (?, ?, ?, 'ai', ?, ?, 1)`,
-      args: [uuidv4(), userId, char.id, content, new Date(Date.now() - hoursAgo * 3600000).toISOString()],
+      sql: `INSERT INTO posts (id, user_id, author_id, author_type, content, created_at, ai,theme_version) VALUES (?, ?, ?, 'ai', ?, ?, 1,?)`,
+      args: [uuidv4(), userId, char.id, content, new Date(Date.now() - hoursAgo * 3600000).toISOString(),(await themeState(userId)).theme_version],
     });
   }
   if (!statements.length) throw new Error('有効な初期投稿を生成できませんでした');
@@ -343,6 +388,7 @@ module.exports = {
   analyzeEngagementIntent,
   scheduleReactions,
   scheduleReplyReactions,
+  prepareReplyReactions,
   backfillDirectReplies,
   processReactionQueue,
   generateAITimelinePosts,

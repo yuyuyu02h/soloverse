@@ -1,4 +1,4 @@
-require('dotenv').config();
+if (process.env.SOLOVERSE_RUNTIME !== 'cloudflare') require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { db, initDB } = require('./src/db/schema');
@@ -37,11 +37,14 @@ app.use(cors({
 app.use(express.json({ limit: '32kb' }));
 
 app.use(async (_, __, next) => {
-  try { await db.execute('PRAGMA foreign_keys = ON'); } catch (_) {}
+  if (process.env.SOLOVERSE_RUNTIME !== 'cloudflare') {
+    try { await db.execute('PRAGMA foreign_keys = ON'); } catch (_) {}
+  }
   next();
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/timeline', timelineRoutes);
 app.get('/api/health', (_, res) => res.json({
@@ -67,6 +70,7 @@ function startBackgroundJobs() {
     queueRunning = true;
     try {
       await processReactionQueue();
+      await require('./src/services/celebrityMode').processPendingCelebrityScenes();
       await require('./src/services/contentPipeline').publishAll();
     }
     catch (e) { console.error('[Queue] Error:', e.message); }

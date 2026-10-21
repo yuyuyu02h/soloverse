@@ -1,0 +1,13 @@
+{
+  "existing_tables_unchanged": true,
+  "changed_existing_tables": [],
+  "checked_existing_tables": 21,
+  "accounts": 6,
+  "characters": 30,
+  "posts": 238,
+  "generation_session_table_added": true,
+  "active_sessions": 0,
+  "backend_health": "ok",
+  "frontend_http_status": 200,
+  "frontend_title_present": true
+}

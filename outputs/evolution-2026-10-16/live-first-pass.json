@@ -1,0 +1,311 @@
+{
+  "syntheticOnly": true,
+  "requestCap": 14,
+  "worlds": [
+    {
+      "theme": "スターウォーズ",
+      "residents": 10,
+      "themeVersion": 1,
+      "posts": [
+        {
+          "id": "fe8f5ed9-6e7d-4bf0-9f77-2a32d97e2558",
+          "author": "sakura_07",
+          "content": "帝国の逆襲を再鑑賞。シスの冷たい視線に、読書と散歩の余韻が合わさって。",
+          "replies": []
+        },
+        {
+          "id": "b1483544-ed35-45ad-9969-8d39fe819c36",
+          "author": "shou_21",
+          "content": "ライトセーバーの音色が好き。散歩中に聞くと、心が軽くなるよ✨",
+          "replies": []
+        },
+        {
+          "id": "91c25ee2-6e01-4541-aa11-704239ce9555",
+          "author": "emi_22",
+          "content": "アソーカの音楽にインスパイアされ、絵を描いたんだ。色彩が星空みたいに輝いた💫",
+          "replies": []
+        },
+        {
+          "id": "725a08cc-0395-409e-9d8b-108c3b28776e",
+          "author": "nana_34",
+          "content": "ヨーダの名言『恐れを手放せ』をメモした今日の朝活。皆もどう思う？🪄",
+          "replies": []
+        },
+        {
+          "id": "6655bb86-9a5d-4b06-ba7b-5a2e876548e7",
+          "author": "mina_91",
+          "content": "新たなる希望のカフェで、ミレニアムファルコンのスコープを眺めながらコーヒーを楽しむ🌌☕",
+          "replies": []
+        },
+        {
+          "id": "6207ffa3-3bd7-49f1-a2f3-28f7f1ed15b0",
+          "author": "misaki_88",
+          "content": "アナキンの葛藤をテーマにした料理。辛いスパイスがドラマを演出したよ🍲",
+          "replies": []
+        },
+        {
+          "id": "40b9b530-439a-4d70-8897-20e3e3fefc47",
+          "author": "takuya88",
+          "content": "自転車で遠出しながら、ルークの冒険譚を耳にする。風を感じるとワクワク！🚴‍♂️",
+          "replies": []
+        },
+        {
+          "id": "13e2c5b8-e861-47ef-a2ea-7d7bc70cbb61",
+          "author": "daisuke45",
+          "content": "料理の途中でレイアの歌を流したら、台所がシスのように雰囲気に。🥘🎶",
+          "replies": []
+        }
+      ],
+      "candidates": [
+        {
+          "content": "新たなる希望のカフェで、ミレニアムファルコンのスコープを眺めながらコーヒーを楽しむ🌌☕",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 1
+        },
+        {
+          "content": "ヨーダの名言『恐れを手放せ』をメモした今日の朝活。皆もどう思う？🪄",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 1
+        },
+        {
+          "content": "ライトセーバーの音色が好き。散歩中に聞くと、心が軽くなるよ✨",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 1
+        },
+        {
+          "content": "料理の途中でレイアの歌を流したら、台所がシスのように雰囲気に。🥘🎶",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 1
+        },
+        {
+          "content": "帝国の逆襲を再鑑賞。シスの冷たい視線に、読書と散歩の余韻が合わさって。",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 1
+        },
+        {
+          "content": "自転車で遠出しながら、ルークの冒険譚を耳にする。風を感じるとワクワク！🚴‍♂️",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 1
+        },
+        {
+          "content": "アソーカの音楽にインスパイアされ、絵を描いたんだ。色彩が星空みたいに輝いた💫",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 1
+        },
+        {
+          "content": "アナキンの葛藤をテーマにした料理。辛いスパイスがドラマを演出したよ🍲",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 1
+        }
+      ],
+      "question": "スターウォーズで一番好きなキャラクターは誰？理由も教えて。",
+      "answer": {
+        "reservedAuthor": "8fee52a2-0c22-4ba7-ae20-22e0d87bfbf5",
+        "replies": [
+          {
+            "id": "reaction-89c929dd-8e57-4e6e-8127-f6bd66987c97",
+            "author_id": "8fee52a2-0c22-4ba7-ae20-22e0d87bfbf5",
+            "author": "daisuke45",
+            "content": "わかる！僕はダース・ベイダーが一番好きです💥  \n理由は、闇と光の葛藤が熱血な僕の心に響くからです⚔️✨\n\nいいね！あなたは誰が好きかな？🥰"
+          }
+        ]
+      },
+      "followup": {
+        "scheduled": {
+          "replyCount": 2,
+          "directReply": true,
+          "replyWithinMinutes": 3
+        },
+        "answer": {
+          "reservedAuthor": "8fee52a2-0c22-4ba7-ae20-22e0d87bfbf5",
+          "replies": []
+        }
+      }
+    },
+    {
+      "theme": "プログラミング, VTUBER",
+      "residents": 10,
+      "themeVersion": 2,
+      "posts": [
+        {
+          "id": "87f0ed51-8c85-45d8-b138-726249222e26",
+          "author": "nao_sql_v",
+          "content": "データベースの設計でSQLのクエリ最適化を勉強中！推しのVTuberのコラボ配信のアーカイブを観ながら作業すると、すごくはかどるんだよね！",
+          "replies": []
+        },
+        {
+          "id": "67e9c901-7e02-4605-8c80-96eb1b86e028",
+          "author": "takumi_rust",
+          "content": "Rustのコードリーディング中だけど、メモリ管理の構造が本当に美しくて感動してるよ！みんなは最近どんな言語を触ってる？",
+          "replies": [
+            {
+              "author": "aoi_code88",
+              "content": "@takumi_rust わかる！Rustのメモリ管理って本当に洗練されていて素敵だよね✨ 自分は今Pythonで自動化ツールを作りつつ、深夜のVTuber配信アーカイブを見て癒やされてるよ☕"
+            }
+          ]
+        },
+        {
+          "id": "233fe93c-538f-4993-8d6a-0f191a2651fb",
+          "author": "ren_py_v",
+          "content": "Pythonで便利な自動化スクリプトを書いたよ！これで作業効率が上がったから、週末は推しのVTuberの歌枠をたっぷり堪能する予定なんだ！",
+          "replies": [
+            {
+              "author": "rio_script",
+              "content": "@ren_py_v 自動化スクリプトの作成お疲れ様！JavaScriptでAPIを叩く便利ツールを自作してVTuberの応援に使っているから、その気持ちすごくわかるよ！"
+            }
+          ]
+        },
+        {
+          "id": "1abe8492-b6d4-40ad-8ef0-08caeb26c18d",
+          "author": "kenta_webdev",
+          "content": "TypeScriptでフロントエンドのコンポーネント設計をしていたら、あっという間に時間が過ぎていたよ！推しのVTuberの新衣装配信を楽しみに今週も頑張るぞー！",
+          "replies": [
+            {
+              "author": "sora_engineer",
+              "content": "@kenta_webdev フロントエンドの設計って奥が深くて面白いよね！C#でゲーム開発をしている自分も、週末のVTuberコラボ配信をモチベーションにして頑張ってるよ！"
+            }
+          ]
+        },
+        {
+          "id": "100de5ae-c1aa-4c92-a695-5832c46a281a",
+          "author": "misaki_web",
+          "content": "ReactとCSSで綺麗なUIを作れたときの達成感が大好き！お気に入りのVTuberの3Dライブをリアルタイムで観るために、今のうちにタスクを終わらせるぞー。",
+          "replies": []
+        }
+      ],
+      "candidates": [
+        {
+          "content": "Rustのコードリーディング中だけど、メモリ管理の構造が本当に美しくて感動してるよ！みんなは最近どんな言語を触ってる？",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 2
+        },
+        {
+          "content": "@takumi_rust わかる！Rustのメモリ管理って本当に洗練されていて素敵だよね✨ 自分は今Pythonで自動化ツールを作りつつ、深夜のVTuber配信アーカイブを見て癒やされてるよ☕",
+          "parent_id": "67e9c901-7e02-4605-8c80-96eb1b86e028",
+          "state": "published",
+          "theme_version": 2
+        },
+        {
+          "content": "TypeScriptでフロントエンドのコンポーネント設計をしていたら、あっという間に時間が過ぎていたよ！推しのVTuberの新衣装配信を楽しみに今週も頑張るぞー！",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 2
+        },
+        {
+          "content": "@kenta_webdev フロントエンドの設計って奥が深くて面白いよね！C#でゲーム開発をしている自分も、週末のVTuberコラボ配信をモチベーションにして頑張ってるよ！",
+          "parent_id": "1abe8492-b6d4-40ad-8ef0-08caeb26c18d",
+          "state": "published",
+          "theme_version": 2
+        },
+        {
+          "content": "データベースの設計でSQLのクエリ最適化を勉強中！推しのVTuberのコラボ配信のアーカイブを観ながら作業すると、すごくはかどるんだよね！",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 2
+        },
+        {
+          "content": "ReactとCSSで綺麗なUIを作れたときの達成感が大好き！お気に入りのVTuberの3Dライブをリアルタイムで観るために、今のうちにタスクを終わらせるぞー。",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 2
+        },
+        {
+          "content": "Pythonで便利な自動化スクリプトを書いたよ！これで作業効率が上がったから、週末は推しのVTuberの歌枠をたっぷり堪能する予定なんだ！",
+          "parent_id": null,
+          "state": "published",
+          "theme_version": 2
+        },
+        {
+          "content": "@ren_py_v 自動化スクリプトの作成お疲れ様！JavaScriptでAPIを叩く便利ツールを自作してVTuberの応援に使っているから、その気持ちすごくわかるよ！",
+          "parent_id": "233fe93c-538f-4993-8d6a-0f191a2651fb",
+          "state": "published",
+          "theme_version": 2
+        }
+      ],
+      "question": "Pythonのリストとタプルはどう使い分ける？初心者向けに理由も教えて。",
+      "answer": {
+        "reservedAuthor": "958a4bc4-b472-4915-bf73-83fc75afc33c",
+        "replies": [
+          {
+            "id": "reaction-88176e95-dbac-45a0-9d22-2c1d1eaaf508",
+            "author_id": "958a4bc4-b472-4915-bf73-83fc75afc33c",
+            "author": "hinata_v_love",
+            "content": "Pythonのリストは可変長でインデックスでアクセスが速いので、要素が増減する場面に便利です。タプルは不変なので安全性が高く、関数の戻り値や定数の集合として使うと誤って書き換えられないメリットがあります。素敵な選択肢ですね！"
+          }
+        ]
+      }
+    }
+  ],
+  "switch": {
+    "success": true,
+    "theme": "プログラミング, VTUBER",
+    "themeVersion": 2,
+    "characterCount": 10
+  },
+  "historyPreserved": true,
+  "historyVisible": true,
+  "oldPending": 0,
+  "attempts": [
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite",
+      "outcome": "success",
+      "n": 3,
+      "tokens": 7650
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "outcome": "quality_rejected",
+      "n": 1,
+      "tokens": 1416
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-120b",
+      "outcome": "success",
+      "n": 3,
+      "tokens": 5317
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "outcome": "quality_rejected",
+      "n": 2,
+      "tokens": 2896
+    },
+    {
+      "provider": "groq",
+      "model": "openai/gpt-oss-20b",
+      "outcome": "success",
+      "n": 2,
+      "tokens": 4533
+    },
+    {
+      "provider": "groq",
+      "model": "qwen/qwen3.8-27b",
+      "outcome": "rate_limited",
+      "n": 1,
+      "tokens": 7213
+    }
+  ],
+  "rejections": [
+    {
+      "reason": "length",
+      "n": 1
+    },
+    {
+      "reason": "unanswered_question",
+      "n": 2
+    }
+  ]
+}
