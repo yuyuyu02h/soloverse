@@ -180,20 +180,33 @@ router.post('/regenerate', authenticate, async (req, res) => {
         { sql: 'DELETE FROM content_candidates WHERE user_id = ? AND theme_version=?', args: [userId,settings.theme_version] },
         { sql: 'DELETE FROM content_pool_state WHERE user_id = ?', args: [userId] },
         { sql: 'DELETE FROM reaction_queue WHERE user_id = ? AND theme_version=?', args: [userId,settings.theme_version] },
-        { sql: 'DELETE FROM notifications WHERE user_id = ?', args: [userId] },
-        { sql: "DELETE FROM likes WHERE user_id = ? AND liker_type = 'ai'", args: [userId] },
+        // Notifications have no theme column: use their post, or their resident
+        // for notifications without a post. Never clear archived reactions.
+        { sql: `DELETE FROM notifications WHERE user_id=? AND (
+                  post_id IN (SELECT id FROM posts WHERE user_id=? AND theme_version=?)
+                  OR (post_id IS NULL AND character_id IN (SELECT id FROM ai_characters WHERE user_id=? AND theme_version=?)))`,
+          args: [userId,userId,settings.theme_version,userId,settings.theme_version] },
+        { sql: `DELETE FROM likes WHERE user_id=? AND post_id IN (
+                  SELECT id FROM posts WHERE user_id=? AND theme_version=? AND (author_type='ai' OR likes.liker_type='ai'))`,
+          args: [userId,userId,settings.theme_version] },
+        // Walk upward from every own post (including deleted placeholders).
+        // Keep the required AI ancestors as tombstones, preserving all links.
         {
-          sql: `WITH RECURSIVE removed(id) AS (
-                  SELECT id FROM posts WHERE user_id = ? AND theme_version=? AND author_type = 'ai'
+          sql: `WITH RECURSIVE kept(id,reply_to) AS (
+                  SELECT id,reply_to FROM posts WHERE user_id=? AND author_type='user'
                   UNION
-                  SELECT child.id FROM posts child JOIN removed parent ON child.reply_to = parent.id
-                  WHERE child.user_id = ?
+                  SELECT parent.id,parent.reply_to FROM posts parent JOIN kept child ON parent.id=child.reply_to
+                  WHERE parent.user_id=?
                 )
-                DELETE FROM posts WHERE id IN (SELECT id FROM removed)`,
-          args: [userId,settings.theme_version, userId],
+                DELETE FROM posts WHERE user_id=? AND theme_version=? AND author_type='ai'
+                  AND id NOT IN (SELECT id FROM kept)`,
+          args: [userId,userId,userId,settings.theme_version],
         },
-        { sql: 'DELETE FROM trends WHERE user_id = ?', args: [userId] },
-        { sql: 'DELETE FROM character_growth_log WHERE user_id = ?', args: [userId] },
+        { sql: `UPDATE posts SET content='',deleted_at=COALESCE(deleted_at,?)
+                WHERE user_id=? AND theme_version=? AND author_type='ai'`,
+          args: [new Date().toISOString(),userId,settings.theme_version] },
+        { sql: 'DELETE FROM trends WHERE user_id=? AND theme_version=?', args: [userId,settings.theme_version] },
+        // Growth history has no theme column, so retain it rather than erase history.
         { sql: 'DELETE FROM ai_characters WHERE user_id = ? AND theme_version=?', args: [userId,settings.theme_version] },
       ];
       for (const c of characters) {

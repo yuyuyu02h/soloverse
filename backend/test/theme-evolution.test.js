@@ -281,3 +281,62 @@ test('celebrity mode switch followed by seed quota wait returns 202 with recover
   assert.equal(world.data.settings.mode,'celebrity'); assert.equal(world.data.characters.length,10);
   assert.equal((await db.execute("SELECT COUNT(*) n FROM posts WHERE id='previous-world'")).rows[0].n,1);
 });
+
+test('regeneration preserves nested own replies and archived reactions, using AI tombstones', async () => {
+  await post('history-ai','owner0','以前のAI投稿');
+  await post('history-own','owner','以前の返信','history-ai');
+  await celebrity.createCelebrityScene('owner','history-own',starPosts[0]);
+  assert.equal((await api('/api/onboarding/theme',{body:{interests:'映画'}})).status,200);
+  const current=(await db.execute("SELECT id FROM ai_characters WHERE user_id='owner' AND theme_version=2 LIMIT 1")).rows[0].id;
+  await post('current-ai',current,'現在のAI投稿',null,2);
+  await post('own-first','owner','本人の返信','current-ai',2);
+  await post('middle-ai',current,'間のAI返信','own-first',2);
+  await post('own-last','owner','本人の多段返信','middle-ai',2);
+  await post('ai-leaf',current,'不要なAI返信','own-last',2);
+  await post('unused-ai',current,'不要な独立AI投稿',null,2);
+  await post('own-root','owner','本人の独立投稿',null,2);
+  await db.execute("INSERT INTO posts(id,user_id,author_id,author_type,content) VALUES('other-root','other','other0','ai','他者の投稿')");
+  for (const [id,target,char] of [['old','history-own','owner0'],['new','own-root',current]]) {
+    await db.execute({sql:"INSERT INTO notifications(id,user_id,type,character_id,post_id) VALUES(?,'owner','like',?,?)",args:[id,char,target]});
+    await db.execute({sql:"INSERT INTO likes(id,user_id,post_id,liker_id,liker_type) VALUES(?,'owner',?,?,'ai')",args:[id,target,char]});
+    await db.execute({sql:"INSERT INTO trends(id,user_id,keyword,description,theme_version) VALUES(?,'owner','映画','説明',?)",args:[id,id==='old'?1:2]});
+  }
+  await db.execute("INSERT INTO likes(id,user_id,post_id,liker_id,liker_type) VALUES('own-like','owner','own-root','owner','user')");
+  await db.execute("INSERT INTO character_growth_log(id,user_id,trigger_reason) VALUES('growth','owner','成長履歴')");
+  const ownBefore=(await db.execute("SELECT * FROM posts WHERE user_id='owner' AND author_type='user' ORDER BY id")).rows;
+  for (let attempt=0;attempt<2;attempt++) {
+    assert.equal((await api('/api/onboarding/regenerate',{body:{}})).status,200);
+    assert.deepEqual((await db.execute("SELECT * FROM posts WHERE user_id='owner' AND author_type='user' ORDER BY id")).rows,ownBefore);
+    const timeline=await api('/api/timeline?ids=current-ai,own-root');
+    assert.equal(timeline.status,200);
+    const root=timeline.data.posts.find(p=>p.id==='current-ai');
+    assert.ok(root.deleted_at); assert.equal(root.content,'');
+    assert.equal(root.author_name,'削除されたAI住人'); assert.equal(root.author_handle,'deleted');
+    assert.equal(root.reply_preview[0].id,'own-first');
+    const thread=(await api('/api/timeline/replies/current-ai')).data.replies;
+    assert.deepEqual(new Set(thread.map(p=>p.id)),new Set(['own-first','middle-ai','own-last']));
+    assert.ok(thread.find(p=>p.id==='middle-ai').deleted_at);
+    assert.equal(thread.find(p=>p.id==='middle-ai').author_name,'削除されたAI住人');
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM posts WHERE id IN ('ai-leaf','unused-ai')")).rows[0].n,0);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM posts WHERE id='other-root' AND content='他者の投稿'")).rows[0].n,1);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM ai_characters WHERE user_id='owner' AND theme_version=2")).rows[0].n,10);
+    assert.equal((await db.execute("SELECT content FROM posts WHERE id='history-ai'")).rows[0].content,'以前のAI投稿');
+    for (const table of ['notifications','trends']) assert.deepEqual((await db.execute(`SELECT id FROM ${table} WHERE user_id='owner' ORDER BY id`)).rows.map(r=>r.id),['old']);
+    assert.deepEqual((await db.execute("SELECT id FROM likes WHERE user_id='owner' ORDER BY id")).rows.map(r=>r.id),['old','own-like']);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM celebrity_scenes WHERE post_id='history-own'")).rows[0].n,1);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM character_growth_log WHERE id='growth'")).rows[0].n,1);
+    assert.equal((await api('/api/timeline/post',{body:{content:'削除跡への返信',replyTo:'current-ai'}})).status,404);
+  }
+});
+
+test('regeneration rolls back cleanup when replacement resident saving fails', async () => {
+  await post('rollback-ai','owner0','残すAI投稿');
+  await post('rollback-own','owner','残す本人返信','rollback-ai');
+  await db.execute("CREATE TRIGGER reject_replacement BEFORE INSERT ON ai_characters BEGIN SELECT RAISE(ABORT,'test save failure'); END");
+  const before=(await db.execute("SELECT * FROM posts WHERE user_id='owner' ORDER BY id")).rows;
+  try {
+    assert.equal((await api('/api/onboarding/regenerate',{body:{}})).status,500);
+    assert.deepEqual((await db.execute("SELECT * FROM posts WHERE user_id='owner' ORDER BY id")).rows,before);
+    assert.equal((await db.execute("SELECT COUNT(*) n FROM ai_characters WHERE user_id='owner'")).rows[0].n,2);
+  } finally { await db.execute('DROP TRIGGER reject_replacement'); }
+});

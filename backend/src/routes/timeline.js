@@ -41,8 +41,8 @@ router.get('/', authenticate, async (req, res) => {
     if (since) {
       // 差分取得: since より新しい投稿のみ
       sql = `SELECT p.*,
-              CASE WHEN p.author_type = 'ai' THEN ac.name    ELSE u.username END as author_name,
-              CASE WHEN p.author_type = 'ai' THEN ac.username ELSE u.username END as author_handle,
+              CASE WHEN p.author_type = 'ai' THEN COALESCE(ac.name, '削除されたAI住人')    ELSE u.username END as author_name,
+              CASE WHEN p.author_type = 'ai' THEN COALESCE(ac.username, 'deleted') ELSE u.username END as author_handle,
               CASE WHEN p.author_type = 'ai' THEN ac.avatar_seed ELSE NULL END as avatar_seed,
               CASE WHEN p.author_type = 'ai' THEN ac.personality ELSE NULL END as personality,
               (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
@@ -57,8 +57,8 @@ router.get('/', authenticate, async (req, res) => {
     } else {
       // 通常取得（ページネーション）
       sql = `SELECT p.*,
-              CASE WHEN p.author_type = 'ai' THEN ac.name    ELSE u.username END as author_name,
-              CASE WHEN p.author_type = 'ai' THEN ac.username ELSE u.username END as author_handle,
+              CASE WHEN p.author_type = 'ai' THEN COALESCE(ac.name, '削除されたAI住人')    ELSE u.username END as author_name,
+              CASE WHEN p.author_type = 'ai' THEN COALESCE(ac.username, 'deleted') ELSE u.username END as author_handle,
               CASE WHEN p.author_type = 'ai' THEN ac.avatar_seed ELSE NULL END as avatar_seed,
               CASE WHEN p.author_type = 'ai' THEN ac.personality ELSE NULL END as personality,
               (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
@@ -103,8 +103,8 @@ router.get('/', authenticate, async (req, res) => {
 
     const replyRows = postIds.length ? (await db.execute({
       sql: `SELECT * FROM (SELECT p.*,
-        CASE WHEN p.author_type='ai' THEN ac.name ELSE u.username END AS author_name,
-        CASE WHEN p.author_type='ai' THEN ac.username ELSE u.username END AS author_handle,
+        CASE WHEN p.author_type='ai' THEN COALESCE(ac.name, '削除されたAI住人') ELSE u.username END AS author_name,
+        CASE WHEN p.author_type='ai' THEN COALESCE(ac.username, 'deleted') ELSE u.username END AS author_handle,
         CASE WHEN p.author_type='ai' THEN ac.avatar_seed ELSE NULL END AS avatar_seed,
         (SELECT COUNT(*) FROM likes WHERE post_id=p.id) AS like_count,
         (SELECT COUNT(*) FROM likes WHERE post_id=p.id AND liker_id=?) AS user_liked,
@@ -283,8 +283,8 @@ router.get('/replies/:postId', authenticate, async (req, res) => {
             )
             SELECT p.*,
               thread.depth,
-              CASE WHEN p.author_type = 'ai' THEN ac.name    ELSE u.username END as author_name,
-              CASE WHEN p.author_type = 'ai' THEN ac.username ELSE u.username END as author_handle,
+              CASE WHEN p.author_type = 'ai' THEN COALESCE(ac.name, '削除されたAI住人')    ELSE u.username END as author_name,
+              CASE WHEN p.author_type = 'ai' THEN COALESCE(ac.username, 'deleted') ELSE u.username END as author_handle,
               CASE WHEN p.author_type = 'ai' THEN ac.avatar_seed ELSE NULL END as avatar_seed,
               (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
               (SELECT COUNT(*) FROM likes WHERE post_id = p.id AND liker_id = ?) as user_liked

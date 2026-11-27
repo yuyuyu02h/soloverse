@@ -323,7 +323,7 @@ async function processReply(item) {
 async function seedTimeline(userId) {
   await themeState(userId);
   const existing = await db.execute({
-    sql: `SELECT id FROM posts p WHERE user_id = ? AND ${currentVersion('p')} AND author_type = 'ai' LIMIT 1`, args: [userId],
+    sql: `SELECT id FROM posts p WHERE user_id = ? AND ${currentVersion('p')} AND author_type = 'ai' AND deleted_at IS NULL LIMIT 1`, args: [userId],
   });
   if (existing.rows.length) return 0;
   const [charsResult, settingsResult] = await Promise.all([

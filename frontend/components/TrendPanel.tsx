@@ -74,7 +74,7 @@ export function TrendPanel({ onClose, onTrendClick, onWorldRebuilt }: {
   const rebuildWorld = async () => {
     if (rebuilding) return;
     const accepted = window.confirm(
-      'AI住人・AI投稿・AI通知を新しく作り直します。あなた自身の投稿とアカウントは残ります。続けますか？'
+      '現在のテーマのAI住人・AI投稿・AI通知を作り直します。あなた自身の投稿・返信とアカウント、過去テーマの履歴は残ります。返信先のAI投稿は削除跡として残ります。続けますか？'
     );
     if (!accepted) return;
     setRebuilding(true);
