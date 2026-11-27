@@ -154,10 +154,24 @@ test('主要ユーザーフローとテナント境界が動作する', async ()
   assert.ok(!older.data.posts.some(post => post.id === postId));
   assert.ok(older.data.posts.length > 0);
 
+  // Keep a multi-level own conversation under an AI root in both pipelines.
+  const aiRoot = 'regenerate-ai-root';
+  const middle = 'regenerate-ai-middle';
+  await db.batch([
+    { sql: "INSERT INTO posts(id,user_id,author_id,author_type,content) VALUES(?,?,?,'ai','AI親')", args: [aiRoot,registered.data.userId,character.rows[0].id] },
+    { sql: "INSERT INTO posts(id,user_id,author_id,author_type,content,reply_to) VALUES(?,?,?,'user','本人返信',?)", args: ['regenerate-own-first',registered.data.userId,registered.data.userId,aiRoot] },
+    { sql: "INSERT INTO posts(id,user_id,author_id,author_type,content,reply_to) VALUES(?,?,?,'ai','AI中間',?)", args: [middle,registered.data.userId,character.rows[0].id,'regenerate-own-first'] },
+    { sql: "INSERT INTO posts(id,user_id,author_id,author_type,content,reply_to) VALUES(?,?,?,'user','本人の多段返信',?)", args: ['regenerate-own-last',registered.data.userId,registered.data.userId,middle] },
+  ], 'write');
   const regenerated = await api('/api/onboarding/regenerate', { method: 'POST', token, body: {} });
   assert.equal(regenerated.status, 200);
   assert.equal(regenerated.data.characterCount, 10);
   assert.ok(regenerated.data.seedCount > 0);
+  const keptReplies = await api(`/api/timeline/replies/${aiRoot}`, { token });
+  assert.equal(keptReplies.status, 200);
+  assert.deepEqual(new Set(keptReplies.data.replies.map(p => p.id)), new Set(['regenerate-own-first', middle, 'regenerate-own-last']));
+  assert.equal(keptReplies.data.replies.find(p => p.id === middle).content, '');
+  assert.ok(keptReplies.data.replies.find(p => p.id === middle).deleted_at);
   const afterRegenerate = await api('/api/timeline?page=0', { token });
   assert.ok(afterRegenerate.data.posts.some(post => post.id === postId));
   assert.ok(afterRegenerate.data.posts.some(post => post.author_type === 'ai'));
